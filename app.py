@@ -202,7 +202,7 @@ with tab2:
 with tab3:
     st.subheader("Discounted Cash Flow (DCF) Breakdown")
     dcf_data = {
-        "Metric": ["Present Value of FCFs", "Terminal Value (TV)", "Present Value of TV", "Enterprise Value (EV)", "Less: Total Debt", "Add: Cash (Current Assets proxy)", "Equity Value", "Shares Outstanding", "Implied Share Price"],
+        "Metric": ["Present Value of FCFs", "Terminal Value (TV)", "Present Value of TV", "Enterprise Value (EV)", "Total Debt", "Cash (Current Assets proxy)", "Equity Value", "Shares Outstanding", "Implied Share Price"],
         "Value": [pv_fcf, terminal_value, pv_tv, enterprise_value, df_master.loc["Total Debt", base_yr], df_master.loc["Current Assets", base_yr], equity_value, df_master.loc["Shares Outstanding", base_yr], implied_share_price]
     }
     st.table(pd.DataFrame(dcf_data).set_index("Metric").style.format("{:,.2f}"))
