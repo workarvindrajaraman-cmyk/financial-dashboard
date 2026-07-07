@@ -6,7 +6,12 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # --- DASHBOARD CONFIGURATION ---
-st.set_page_config(page_title="Corporate Financial Engine", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="Corporate Financial Engine", 
+    page_icon="📊", 
+    layout="wide", 
+    initial_sidebar_state="expanded"
+)
 
 # FORCE MEMORY WIPE ON FIRST LOAD
 if 'initialized' not in st.session_state:
@@ -48,7 +53,6 @@ with st.sidebar:
     
     st.divider()
     st.subheader("📁 Data Ingestion")
-    # Added PDF to accepted types to show capability awareness
     uploaded_file = st.file_uploader("Upload Financial Statements", type=['csv', 'xlsx', 'pdf'], help="Upload historical data to bypass manual entry.")
     
     with st.expander("⏳ Timeline Settings", expanded=True):
@@ -81,7 +85,7 @@ with st.sidebar:
                 hist_df = pd.read_excel(uploaded_file, index_col=0)
                 st.success("Excel Data successfully loaded!")
             elif uploaded_file.name.endswith('.pdf'):
-                st.warning("⚠️ PDF parsing requires advanced AI text extraction and is currently in beta. Please use CSV or XLSX for automatic population.")
+                st.warning("⚠️ PDF parsing requires AI extraction. Please use CSV or XLSX.")
                 hist_df = hist_df_template
         except Exception:
             st.error("Format error. Using manual input.")
@@ -169,61 +173,64 @@ def generate_excel_with_charts(df, kpi, year_list, final_year):
         ws_charts = workbook.add_worksheet('Visual Dashboards')
         num_years = len(year_list)
 
-        # 1. Excel Native Chart: Revenue vs EBITDA (Column)
+        # 1. Excel Native Chart: Revenue vs EBITDA
         chart1 = workbook.add_chart({'type': 'column'})
         rev_row = df.index.get_loc('Revenue') + 1
         ebitda_row = df.index.get_loc('EBITDA') + 1
-
-        chart1.add_series({
-            'name': ['Financials', rev_row, 0], 
-            'categories': ['Financials', 0, 1, 0, num_years], 
-            'values': ['Financials', rev_row, 1, rev_row, num_years], 
-            'fill': {'color': '#1f77b4'}
-        })
-        chart1.add_series({
-            'name': ['Financials', ebitda_row, 0], 
-            'categories': ['Financials', 0, 1, 0, num_years], 
-            'values': ['Financials', ebitda_row, 1, ebitda_row, num_years], 
-            'fill': {'color': '#2ca02c'}
-        })
-        
-        chart1.set_title({'name': 'Revenue vs EBITDA Trajectory'})
-        chart1.set_x_axis({'name': 'Financial Years', 'name_font': {'bold': True}})
-        chart1.set_y_axis({'name': f'Value in {unit}', 'name_font': {'bold': True}, 'major_gridlines': {'visible': True}})
+        chart1.add_series({'name': ['Financials', rev_row, 0], 'categories': ['Financials', 0, 1, 0, num_years], 'values': ['Financials', rev_row, 1, rev_row, num_years], 'fill': {'color': '#1f77b4'}})
+        chart1.add_series({'name': ['Financials', ebitda_row, 0], 'categories': ['Financials', 0, 1, 0, num_years], 'values': ['Financials', ebitda_row, 1, ebitda_row, num_years], 'fill': {'color': '#2ca02c'}})
         ws_charts.insert_chart('B2', chart1, {'x_scale': 1.5, 'y_scale': 1.5})
 
-        # 2. Excel Native Chart: ROE & ROCE (Line Chart)
+        # 2. Excel Native Chart: ROE & ROCE
         chart2 = workbook.add_chart({'type': 'line'})
         roe_row = kpi.index.get_loc('ROE (%)') + 1
         roce_row = kpi.index.get_loc('ROCE (%)') + 1
-
-        chart2.add_series({
-            'name': ['KPIs', roe_row, 0], 
-            'categories': ['KPIs', 0, 1, 0, num_years], 
-            'values': ['KPIs', roe_row, 1, roe_row, num_years], 
-            'line': {'width': 2.5, 'color': '#ff7f0e'}
-        })
-        chart2.add_series({
-            'name': ['KPIs', roce_row, 0], 
-            'categories': ['KPIs', 0, 1, 0, num_years], 
-            'values': ['KPIs', roce_row, 1, roce_row, num_years], 
-            'line': {'width': 2.5, 'color': '#d62728'}
-        })
-        
-        chart2.set_title({'name': 'Return on Capital (Efficiency)'})
-        chart2.set_x_axis({'name': 'Financial Years'})
-        chart2.set_y_axis({'name': 'Percentage (%)'})
+        chart2.add_series({'name': ['KPIs', roe_row, 0], 'categories': ['KPIs', 0, 1, 0, num_years], 'values': ['KPIs', roe_row, 1, roe_row, num_years], 'line': {'width': 2.5, 'color': '#ff7f0e'}})
+        chart2.add_series({'name': ['KPIs', roce_row, 0], 'categories': ['KPIs', 0, 1, 0, num_years], 'values': ['KPIs', roce_row, 1, roce_row, num_years], 'line': {'width': 2.5, 'color': '#d62728'}})
         ws_charts.insert_chart('B20', chart2, {'x_scale': 1.5, 'y_scale': 1.5})
 
-        # 3. Excel Native Chart: Cost Structure (Pie Chart)
+        # 3. Excel Native Chart: Cost Structure
         costs_list = ['COGS', 'S&G Expenses', 'Depreciation', 'Interest', 'Tax']
         ws_charts.write('Q1', 'Cost Component')
         ws_charts.write('R1', 'Value')
         for idx, cost in enumerate(costs_list):
             ws_charts.write(idx+1, 16, cost)
             ws_charts.write(idx+1, 17, df.loc[cost, final_year])
-
         chart3 = workbook.add_chart({'type': 'pie'})
-        chart3.add_series({
-            'name': 'Cost Structure', 
-            'categories': ['Visual Dashboards', 1,
+        chart3.add_series({'name': 'Cost Structure', 'categories': ['Visual Dashboards', 1, 16, len(costs_list), 16], 'values': ['Visual Dashboards', 1, 17, len(costs_list), 17], 'data_labels': {'percentage': True}})
+        ws_charts.insert_chart('K2', chart3, {'x_scale': 1.2, 'y_scale': 1.5})
+
+    return output.getvalue()
+
+
+# --- UI DISPLAY ---
+display_name = company_name if company_name else "New Model"
+st.title(f"📈 {display_name} Corporate Analytics & Valuation Suite")
+
+# Main KPIs
+k1, k2, k3, k4, k5, k6 = st.columns(6)
+k1.metric(f"Rev ({years[-1]})", f"{df_master.loc['Revenue', years[-1]]:,.0f}")
+k2.metric(f"EBITDA ({years[-1]})", f"{df_master.loc['EBITDA', years[-1]]:,.0f}")
+k3.metric("Terminal ROE", f"{kpi_df.loc['ROE (%)', years[-1]]:.1f}%")
+k4.metric("Free Cash Flow", f"{df_master.loc['Free Cash Flow', years[-1]]:,.0f}")
+k5.metric("Enterprise Value", f"{enterprise_value:,.0f}")
+k6.metric("Implied Share Px", f"{implied_share_price:,.2f}")
+
+st.divider()
+
+tab1, tab2, tab3, tab4 = st.tabs(["📑 Master Statements", "📊 Visual Analytics", "💰 DCF Valuation", "🔬 Download & Exports"])
+
+def format_df(df): return df.style.format("{:,.1f}", na_rep="")
+
+with tab1:
+    st.subheader("Income Statement")
+    st.dataframe(format_df(df_master.loc[["Revenue", "COGS", "Gross Profit", "S&G Expenses", "EBITDA", "Depreciation", "EBIT", "Interest", "EBT", "Tax", "Net Income"]]), use_container_width=True)
+
+with tab2:
+    st.subheader("Advanced Financial Visualizations")
+    fig1 = px.bar(kpi_df.T.reset_index(), x='index', y=['ROE (%)', 'ROCE (%)'], barmode='group', template="plotly_dark")
+    st.plotly_chart(fig1, use_container_width=True)
+
+with tab4:
+    excel_binary = generate_excel_with_charts(df_master, kpi_df, years, years[-1])
+    st.download_button("📥 Download Enterprise Excel Report", excel_binary, f"{display_name.replace(' ', '_')}_Pro_Forma.xlsx")
