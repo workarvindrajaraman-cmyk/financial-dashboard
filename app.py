@@ -48,7 +48,8 @@ with st.sidebar:
     
     st.divider()
     st.subheader("📁 Data Ingestion")
-    uploaded_file = st.file_uploader("Upload Financial Statements", type=['csv', 'xlsx'], help="Upload historical data to bypass manual entry.")
+    # Added PDF to accepted types
+    uploaded_file = st.file_uploader("Upload Financial Statements", type=['csv', 'xlsx', 'pdf'], help="Upload historical data to bypass manual entry.")
     
     with st.expander("⏳ Timeline Settings", expanded=True):
         t1, t2 = st.columns(2)
@@ -70,11 +71,18 @@ with st.sidebar:
             
     hist_df_template = pd.DataFrame(default_data).set_index("Metric")
     
-    # Handle Upload vs Manual
+    # Safe Upload Logic with PDF Trap
     if uploaded_file is not None:
         try:
-            hist_df = pd.read_csv(uploaded_file, index_col=0) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file, index_col=0)
-            st.success("Data successfully loaded!")
+            if uploaded_file.name.endswith('.csv'):
+                hist_df = pd.read_csv(uploaded_file, index_col=0)
+                st.success("CSV Data successfully loaded!")
+            elif uploaded_file.name.endswith('.xlsx'):
+                hist_df = pd.read_excel(uploaded_file, index_col=0)
+                st.success("Excel Data successfully loaded!")
+            elif uploaded_file.name.endswith('.pdf'):
+                st.warning("⚠️ PDF parsing requires advanced text extraction mapping and is currently in beta. Please use CSV or XLSX for automatic population.")
+                hist_df = hist_df_template
         except Exception:
             st.error("Format error. Using manual input.")
             hist_df = hist_df_template
@@ -191,9 +199,9 @@ def generate_excel_with_charts(df, kpi, year_list, final_year):
         costs_list = ['COGS', 'S&G Expenses', 'Depreciation', 'Interest', 'Tax']
         ws_charts.write('Q1', 'Cost Component')
         ws_charts.write('R1', 'Value')
-        for i, cost in enumerate(costs_list):
-            ws_charts.write(i+1, 16, cost)
-            ws_charts.write(i+1, 17, df.loc[cost, final_year])
+        for idx, cost in enumerate(costs_list):
+            ws_charts.write(idx+1, 16, cost)
+            ws_charts.write(idx+1, 17, df.loc[cost, final_year])
 
         chart3 = workbook.add_chart({'type': 'pie'})
         chart3.add_series({'name': 'Cost Structure', 'categories': ['Visual Dashboards', 1, 16, len(costs_list), 16], 'values': ['Visual Dashboards', 1, 17, len(costs_list), 17], 'data_labels': {'percentage': True}})
@@ -251,7 +259,7 @@ with tab1:
 with tab2:
     st.subheader("Advanced Financial Visualizations")
     
-    # Bug Fix: Corrected ROE/ROCE Bar Chart
+    # Corrected ROE/ROCE Bar Chart
     fig1 = px.bar(kpi_df.T.reset_index(), x='index', y=['ROE (%)', 'ROCE (%)'], barmode='group', title="Return on Capital Metrics (Efficiency)", template="plotly_dark", labels={'index': 'Financial Year', 'value': 'Percentage (%)', 'variable': 'Metric'})
     st.plotly_chart(fig1, use_container_width=True)
 
