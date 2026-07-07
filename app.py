@@ -174,8 +174,18 @@ def generate_excel_with_charts(df, kpi, year_list, final_year):
         rev_row = df.index.get_loc('Revenue') + 1
         ebitda_row = df.index.get_loc('EBITDA') + 1
 
-        chart1.add_series({'name': ['Financials', rev_row, 0], 'categories': ['Financials', 0, 1, 0, num_years], 'values': ['Financials', rev_row, 1, rev_row, num_years], 'fill': {'color': '#1f77b4'}})
-        chart1.add_series({'name': ['Financials', ebitda_row, 0], 'categories': ['Financials', 0, 1, 0, num_years], 'values': ['Financials', ebitda_row, 1, ebitda_row, num_years], 'fill': {'color': '#2ca02c'}})
+        chart1.add_series({
+            'name': ['Financials', rev_row, 0], 
+            'categories': ['Financials', 0, 1, 0, num_years], 
+            'values': ['Financials', rev_row, 1, rev_row, num_years], 
+            'fill': {'color': '#1f77b4'}
+        })
+        chart1.add_series({
+            'name': ['Financials', ebitda_row, 0], 
+            'categories': ['Financials', 0, 1, 0, num_years], 
+            'values': ['Financials', ebitda_row, 1, ebitda_row, num_years], 
+            'fill': {'color': '#2ca02c'}
+        })
         
         chart1.set_title({'name': 'Revenue vs EBITDA Trajectory'})
         chart1.set_x_axis({'name': 'Financial Years', 'name_font': {'bold': True}})
@@ -187,5 +197,33 @@ def generate_excel_with_charts(df, kpi, year_list, final_year):
         roe_row = kpi.index.get_loc('ROE (%)') + 1
         roce_row = kpi.index.get_loc('ROCE (%)') + 1
 
-        chart2.add_series({'name': ['KPIs', roe_row, 0], 'categories': ['KPIs', 0, 1, 0, num_years], 'values': ['KPIs', roe_row, 1, roe_row, num_years], 'line': {'width': 2.5, 'color': '#ff7f0e'}})
-        chart2.add_series({'
+        chart2.add_series({
+            'name': ['KPIs', roe_row, 0], 
+            'categories': ['KPIs', 0, 1, 0, num_years], 
+            'values': ['KPIs', roe_row, 1, roe_row, num_years], 
+            'line': {'width': 2.5, 'color': '#ff7f0e'}
+        })
+        chart2.add_series({
+            'name': ['KPIs', roce_row, 0], 
+            'categories': ['KPIs', 0, 1, 0, num_years], 
+            'values': ['KPIs', roce_row, 1, roce_row, num_years], 
+            'line': {'width': 2.5, 'color': '#d62728'}
+        })
+        
+        chart2.set_title({'name': 'Return on Capital (Efficiency)'})
+        chart2.set_x_axis({'name': 'Financial Years'})
+        chart2.set_y_axis({'name': 'Percentage (%)'})
+        ws_charts.insert_chart('B20', chart2, {'x_scale': 1.5, 'y_scale': 1.5})
+
+        # 3. Excel Native Chart: Cost Structure (Pie Chart)
+        costs_list = ['COGS', 'S&G Expenses', 'Depreciation', 'Interest', 'Tax']
+        ws_charts.write('Q1', 'Cost Component')
+        ws_charts.write('R1', 'Value')
+        for idx, cost in enumerate(costs_list):
+            ws_charts.write(idx+1, 16, cost)
+            ws_charts.write(idx+1, 17, df.loc[cost, final_year])
+
+        chart3 = workbook.add_chart({'type': 'pie'})
+        chart3.add_series({
+            'name': 'Cost Structure', 
+            'categories': ['Visual Dashboards', 1,
