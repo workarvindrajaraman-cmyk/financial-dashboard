@@ -48,7 +48,7 @@ with st.sidebar:
     
     st.divider()
     st.subheader("📁 Data Ingestion")
-    # Added PDF to accepted types
+    # Added PDF to accepted types to show capability awareness
     uploaded_file = st.file_uploader("Upload Financial Statements", type=['csv', 'xlsx', 'pdf'], help="Upload historical data to bypass manual entry.")
     
     with st.expander("⏳ Timeline Settings", expanded=True):
@@ -81,7 +81,7 @@ with st.sidebar:
                 hist_df = pd.read_excel(uploaded_file, index_col=0)
                 st.success("Excel Data successfully loaded!")
             elif uploaded_file.name.endswith('.pdf'):
-                st.warning("⚠️ PDF parsing requires advanced text extraction mapping and is currently in beta. Please use CSV or XLSX for automatic population.")
+                st.warning("⚠️ PDF parsing requires advanced AI text extraction and is currently in beta. Please use CSV or XLSX for automatic population.")
                 hist_df = hist_df_template
         except Exception:
             st.error("Format error. Using manual input.")
@@ -188,102 +188,4 @@ def generate_excel_with_charts(df, kpi, year_list, final_year):
         roce_row = kpi.index.get_loc('ROCE (%)') + 1
 
         chart2.add_series({'name': ['KPIs', roe_row, 0], 'categories': ['KPIs', 0, 1, 0, num_years], 'values': ['KPIs', roe_row, 1, roe_row, num_years], 'line': {'width': 2.5, 'color': '#ff7f0e'}})
-        chart2.add_series({'name': ['KPIs', roce_row, 0], 'categories': ['KPIs', 0, 1, 0, num_years], 'values': ['KPIs', roce_row, 1, roce_row, num_years], 'line': {'width': 2.5, 'color': '#d62728'}})
-        
-        chart2.set_title({'name': 'Return on Capital (Efficiency)'})
-        chart2.set_x_axis({'name': 'Financial Years'})
-        chart2.set_y_axis({'name': 'Percentage (%)'})
-        ws_charts.insert_chart('B20', chart2, {'x_scale': 1.5, 'y_scale': 1.5})
-
-        # 3. Excel Native Chart: Cost Structure (Pie Chart)
-        costs_list = ['COGS', 'S&G Expenses', 'Depreciation', 'Interest', 'Tax']
-        ws_charts.write('Q1', 'Cost Component')
-        ws_charts.write('R1', 'Value')
-        for idx, cost in enumerate(costs_list):
-            ws_charts.write(idx+1, 16, cost)
-            ws_charts.write(idx+1, 17, df.loc[cost, final_year])
-
-        chart3 = workbook.add_chart({'type': 'pie'})
-        chart3.add_series({'name': 'Cost Structure', 'categories': ['Visual Dashboards', 1, 16, len(costs_list), 16], 'values': ['Visual Dashboards', 1, 17, len(costs_list), 17], 'data_labels': {'percentage': True}})
-        chart3.set_title({'name': f'Terminal Year Cost Structure ({final_year})'})
-        ws_charts.insert_chart('K2', chart3, {'x_scale': 1.2, 'y_scale': 1.5})
-
-    return output.getvalue()
-
-
-# --- UI DISPLAY ---
-display_name = company_name if company_name else "New Model"
-st.title(f"📈 {display_name} Corporate Analytics & Valuation Suite")
-
-# AI Analyst Summary
-final_yr = years[-1]
-base_yr = hist_years_list[-1]
-st.markdown(f"""
-    <div class="ai-box">
-        <strong>🤖 AI Analyst Summary:</strong><br>
-        Revenue is forecast to grow at an average rate of {rev_growth_input}%, driving top-line from {unit} {df_master.loc['Revenue', base_yr]:,.1f} to {unit} {df_master.loc['Revenue', final_yr]:,.1f} by {final_yr}. 
-        EBITDA margins are projected to shift from {kpi_df.loc['EBITDA Margin (%)', base_yr]:.1f}% to {kpi_df.loc['EBITDA Margin (%)', final_yr]:.1f}%. 
-        Based on the DCF valuation (WACC: {wacc_input}%, Terminal Growth: {tg_input}%), the implied Enterprise Value is <strong>{unit} {enterprise_value:,.1f}</strong>, 
-        yielding an intrinsic share price of <strong>{unit} {implied_share_price:,.2f}</strong>. Overall financial structure indicates a Debt/Equity ratio shifting to {kpi_df.loc['Debt to Equity', final_yr]:.2f}.
-    </div>
-""", unsafe_allow_html=True)
-
-# Main KPIs
-st.subheader("Key Performance Indicators")
-k1, k2, k3, k4, k5, k6 = st.columns(6)
-k1.metric(f"Rev ({final_yr})", f"{df_master.loc['Revenue', final_yr]:,.0f}")
-k2.metric(f"EBITDA ({final_yr})", f"{df_master.loc['EBITDA', final_yr]:,.0f}")
-k3.metric("Terminal ROE", f"{kpi_df.loc['ROE (%)', final_yr]:.1f}%")
-k4.metric("Free Cash Flow", f"{df_master.loc['Free Cash Flow', final_yr]:,.0f}")
-k5.metric("Enterprise Value", f"{enterprise_value:,.0f}")
-k6.metric("Implied Share Px", f"{implied_share_price:,.2f}")
-
-st.divider()
-
-# Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📑 Master Statements", "📊 Visual Analytics", "💰 DCF Valuation", "🔬 Download & Exports"])
-
-def format_df(df): return df.style.format("{:,.1f}", na_rep="")
-
-with tab1:
-    st.subheader("Income Statement")
-    st.dataframe(format_df(df_master.loc[["Revenue", "COGS", "Gross Profit", "S&G Expenses", "EBITDA", "Depreciation", "EBIT", "Interest", "EBT", "Tax", "Net Income"]]), use_container_width=True)
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("Balance Sheet")
-        st.dataframe(format_df(df_master.loc[["Total Assets", "Current Assets", "Total Liabilities" if "Total Liabilities" in df_master.index else "Current Liabilities", "Total Debt", "Total Equity"]]), use_container_width=True)
-    with c2:
-        st.subheader("Cash Flow Statement")
-        st.dataframe(format_df(df_master.loc[["Operating CF", "CapEx", "Financing CF", "Free Cash Flow", "Net Cash Flow"]]), use_container_width=True)
-
-with tab2:
-    st.subheader("Advanced Financial Visualizations")
-    
-    # Corrected ROE/ROCE Bar Chart
-    fig1 = px.bar(kpi_df.T.reset_index(), x='index', y=['ROE (%)', 'ROCE (%)'], barmode='group', title="Return on Capital Metrics (Efficiency)", template="plotly_dark", labels={'index': 'Financial Year', 'value': 'Percentage (%)', 'variable': 'Metric'})
-    st.plotly_chart(fig1, use_container_width=True)
-
-    c1, c2 = st.columns(2)
-    # Chart 2: Revenue vs EBITDA Line/Bar Combo
-    fig2 = px.bar(df_master.T.reset_index(), x='index', y='Revenue', title="Revenue & EBITDA Trajectory", template="plotly_dark", labels={'index': 'Financial Year', 'Revenue': f'Value ({unit})'})
-    fig2.add_trace(go.Scatter(x=df_master.columns, y=df_master.loc['EBITDA'], mode='lines+markers', name='EBITDA', line=dict(color='#00b050', width=3)))
-    c1.plotly_chart(fig2, use_container_width=True)
-
-    # Chart 3: Terminal Cost Structure Pie Chart
-    costs_data = df_master.loc[['COGS', 'S&G Expenses', 'Depreciation', 'Interest', 'Tax'], final_yr].reset_index()
-    costs_data.columns = ['Cost Component', 'Value']
-    fig3 = px.pie(costs_data, values='Value', names='Cost Component', hole=0.4, title=f"Terminal Cost Structure ({final_yr})", template="plotly_dark")
-    c2.plotly_chart(fig3, use_container_width=True)
-
-with tab3:
-    st.subheader("Discounted Cash Flow (DCF) Breakdown")
-    dcf_data = {
-        "Metric": ["Present Value of FCFs", "Terminal Value (TV)", "Present Value of TV", "Enterprise Value (EV)", "Total Debt", "Cash (Current Assets proxy)", "Equity Value", "Shares Outstanding", "Implied Share Price"],
-        "Value": [pv_fcf, terminal_value, pv_tv, enterprise_value, df_master.loc["Total Debt", base_yr], df_master.loc["Current Assets", base_yr], equity_value, df_master.loc["Shares Outstanding", base_yr], implied_share_price]
-    }
-    st.table(pd.DataFrame(dcf_data).set_index("Metric").style.format("{:,.2f}"))
-
-with tab4:
-    st.info("Export the fully linked three-statement model, complete with embedded Excel Native Visualizations.")
-    excel_binary = generate_excel_with_charts(df_master, kpi_df, years, final_yr)
-    st.download_button("📥 Download Enterprise Excel Report (.xlsx)", excel_binary, f"{display_name.replace(' ', '_')}_Pro_Forma.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        chart2.add_series({'
