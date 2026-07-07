@@ -149,6 +149,60 @@ enterprise_value = pv_fcf + pv_tv
 equity_value = enterprise_value - df_master.loc["Total Debt", hist_years_list[-1]] + df_master.loc["Current Assets", hist_years_list[-1]] 
 implied_share_price = safe_divide(equity_value, df_master.loc["Shares Outstanding", hist_years_list[-1]])
 
+# --- EXCEL CHARTING ENGINE ---
+@st.cache_data
+def generate_excel_with_charts(df, kpi, year_list, final_year):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, sheet_name='Financials')
+        kpi.to_excel(writer, sheet_name='KPIs')
+        
+        workbook = writer.book
+        ws_charts = workbook.add_worksheet('Visual Dashboards')
+        num_years = len(year_list)
+
+        # 1. Excel Native Chart: Revenue vs EBITDA (Column)
+        chart1 = workbook.add_chart({'type': 'column'})
+        rev_row = df.index.get_loc('Revenue') + 1
+        ebitda_row = df.index.get_loc('EBITDA') + 1
+
+        chart1.add_series({'name': ['Financials', rev_row, 0], 'categories': ['Financials', 0, 1, 0, num_years], 'values': ['Financials', rev_row, 1, rev_row, num_years], 'fill': {'color': '#1f77b4'}})
+        chart1.add_series({'name': ['Financials', ebitda_row, 0], 'categories': ['Financials', 0, 1, 0, num_years], 'values': ['Financials', ebitda_row, 1, ebitda_row, num_years], 'fill': {'color': '#2ca02c'}})
+        
+        chart1.set_title({'name': 'Revenue vs EBITDA Trajectory'})
+        chart1.set_x_axis({'name': 'Financial Years', 'name_font': {'bold': True}})
+        chart1.set_y_axis({'name': f'Value in {unit}', 'name_font': {'bold': True}, 'major_gridlines': {'visible': True}})
+        ws_charts.insert_chart('B2', chart1, {'x_scale': 1.5, 'y_scale': 1.5})
+
+        # 2. Excel Native Chart: ROE & ROCE (Line Chart)
+        chart2 = workbook.add_chart({'type': 'line'})
+        roe_row = kpi.index.get_loc('ROE (%)') + 1
+        roce_row = kpi.index.get_loc('ROCE (%)') + 1
+
+        chart2.add_series({'name': ['KPIs', roe_row, 0], 'categories': ['KPIs', 0, 1, 0, num_years], 'values': ['KPIs', roe_row, 1, roe_row, num_years], 'line': {'width': 2.5, 'color': '#ff7f0e'}})
+        chart2.add_series({'name': ['KPIs', roce_row, 0], 'categories': ['KPIs', 0, 1, 0, num_years], 'values': ['KPIs', roce_row, 1, roce_row, num_years], 'line': {'width': 2.5, 'color': '#d62728'}})
+        
+        chart2.set_title({'name': 'Return on Capital (Efficiency)'})
+        chart2.set_x_axis({'name': 'Financial Years'})
+        chart2.set_y_axis({'name': 'Percentage (%)'})
+        ws_charts.insert_chart('B20', chart2, {'x_scale': 1.5, 'y_scale': 1.5})
+
+        # 3. Excel Native Chart: Cost Structure (Pie Chart)
+        costs_list = ['COGS', 'S&G Expenses', 'Depreciation', 'Interest', 'Tax']
+        ws_charts.write('Q1', 'Cost Component')
+        ws_charts.write('R1', 'Value')
+        for i, cost in enumerate(costs_list):
+            ws_charts.write(i+1, 16, cost)
+            ws_charts.write(i+1, 17, df.loc[cost, final_year])
+
+        chart3 = workbook.add_chart({'type': 'pie'})
+        chart3.add_series({'name': 'Cost Structure', 'categories': ['Visual Dashboards', 1, 16, len(costs_list), 16], 'values': ['Visual Dashboards', 1, 17, len(costs_list), 17], 'data_labels': {'percentage': True}})
+        chart3.set_title({'name': f'Terminal Year Cost Structure ({final_year})'})
+        ws_charts.insert_chart('K2', chart3, {'x_scale': 1.2, 'y_scale': 1.5})
+
+    return output.getvalue()
+
+
 # --- UI DISPLAY ---
 display_name = company_name if company_name else "New Model"
 st.title(f"📈 {display_name} Corporate Analytics & Valuation Suite")
@@ -179,7 +233,7 @@ k6.metric("Implied Share Px", f"{implied_share_price:,.2f}")
 st.divider()
 
 # Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📑 Master Statements", "📊 Advanced KPIs", "💰 DCF Valuation", "🔬 Download & Exports"])
+tab1, tab2, tab3, tab4 = st.tabs(["📑 Master Statements", "📊 Visual Analytics", "💰 DCF Valuation", "🔬 Download & Exports"])
 
 def format_df(df): return df.style.format("{:,.1f}", na_rep="")
 
@@ -195,11 +249,23 @@ with tab1:
         st.dataframe(format_df(df_master.loc[["Operating CF", "CapEx", "Financing CF", "Free Cash Flow", "Net Cash Flow"]]), use_container_width=True)
 
 with tab2:
-    st.subheader("Advanced Financial Metrics")
-    st.dataframe(kpi_df.style.format("{:,.2f}"), use_container_width=True)
+    st.subheader("Advanced Financial Visualizations")
     
-    fig = px.bar(kpi_df.T.reset_index(), x='index', y=['ROE (%)', 'ROCE (%)'], barmode='group', title="Return on Capital Metrics", template="plotly_dark")
-    st.plotly_chart(fig, use_container_width=True)
+    # Bug Fix: Corrected ROE/ROCE Bar Chart
+    fig1 = px.bar(kpi_df.T.reset_index(), x='index', y=['ROE (%)', 'ROCE (%)'], barmode='group', title="Return on Capital Metrics (Efficiency)", template="plotly_dark", labels={'index': 'Financial Year', 'value': 'Percentage (%)', 'variable': 'Metric'})
+    st.plotly_chart(fig1, use_container_width=True)
+
+    c1, c2 = st.columns(2)
+    # Chart 2: Revenue vs EBITDA Line/Bar Combo
+    fig2 = px.bar(df_master.T.reset_index(), x='index', y='Revenue', title="Revenue & EBITDA Trajectory", template="plotly_dark", labels={'index': 'Financial Year', 'Revenue': f'Value ({unit})'})
+    fig2.add_trace(go.Scatter(x=df_master.columns, y=df_master.loc['EBITDA'], mode='lines+markers', name='EBITDA', line=dict(color='#00b050', width=3)))
+    c1.plotly_chart(fig2, use_container_width=True)
+
+    # Chart 3: Terminal Cost Structure Pie Chart
+    costs_data = df_master.loc[['COGS', 'S&G Expenses', 'Depreciation', 'Interest', 'Tax'], final_yr].reset_index()
+    costs_data.columns = ['Cost Component', 'Value']
+    fig3 = px.pie(costs_data, values='Value', names='Cost Component', hole=0.4, title=f"Terminal Cost Structure ({final_yr})", template="plotly_dark")
+    c2.plotly_chart(fig3, use_container_width=True)
 
 with tab3:
     st.subheader("Discounted Cash Flow (DCF) Breakdown")
@@ -210,9 +276,6 @@ with tab3:
     st.table(pd.DataFrame(dcf_data).set_index("Metric").style.format("{:,.2f}"))
 
 with tab4:
-    st.info("Export the fully linked three-statement model and valuation matrix.")
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df_master.to_excel(writer, sheet_name='Three Statement Model')
-        kpi_df.to_excel(writer, sheet_name='Advanced KPIs')
-    st.download_button("📥 Download Full Enterprise Report (.xlsx)", output.getvalue(), f"{display_name.replace(' ', '_')}_Valuation_Model.xlsx")
+    st.info("Export the fully linked three-statement model, complete with embedded Excel Native Visualizations.")
+    excel_binary = generate_excel_with_charts(df_master, kpi_df, years, final_yr)
+    st.download_button("📥 Download Enterprise Excel Report (.xlsx)", excel_binary, f"{display_name.replace(' ', '_')}_Pro_Forma.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
