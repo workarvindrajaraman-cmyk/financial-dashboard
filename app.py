@@ -42,7 +42,9 @@ if st.sidebar.button("➕ Start New Model (Clear Data)", use_container_width=Tru
 with st.sidebar:
     st.header("🎛️ Engine Controls")
     company_name = st.text_input("Company Name", value="", placeholder="Enter Company Name...")
-    unit = st.radio("Display Unit:", ["Crores", "Lakhs", "Millions"], index=0, horizontal=True)
+    
+    # STRICTLY INDIAN STANDARDS
+    unit = st.radio("Display Unit:", ["Crores", "Lakhs"], index=0, horizontal=True)
     
     st.divider()
     st.subheader("📁 Data Ingestion")
