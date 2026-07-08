@@ -26,6 +26,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# --- PORTFOLIO BRANDING ---
 with st.sidebar:
     st.markdown("### 🏢 Analyst Portfolio")
     st.caption("Developed by: **Arvind Rajaraman**")
@@ -35,7 +36,7 @@ if st.sidebar.button("➕ Start New Model (Clear Data)", use_container_width=Tru
     st.session_state.clear()
     st.rerun()
 
-# --- SIDEBAR: DATA UPLOAD & CONTROLS ---
+# --- SIDEBAR: DATA CONTROLS ---
 with st.sidebar:
     st.header("🎛️ Engine Controls")
     company_name = st.text_input("Company Name", value="", placeholder="Enter Company Name...")
@@ -269,9 +270,302 @@ with tab1:
 
     st.subheader("📈 Revenue, EBITDA & Net Income Trend")
     fig_trend = go.Figure()
-    fig_trend.add_trace(go.Bar(x=years, y=df_master.loc["Revenue", years].values.tolist(), name="Revenue", marker_color=GREEN, opacity=0.85))
-    fig_trend.add_trace(go.Bar(x=years, y=df_master.loc["EBITDA", years].values.tolist(), name="EBITDA", marker_color=BLUE, opacity=0.85))
-    fig_trend.add_trace(go.Scatter(x=years, y=df_master.loc["Net Income", years].values.tolist(), name="Net Income", mode="lines+markers", line=dict(color=AMBER, width=3), marker=dict(size=8)))
+    
+    # Safely broken down lines to prevent truncation
+    fig_trend.add_trace(go.Bar(
+        x=years, 
+        y=df_master.loc["Revenue", years].values.tolist(), 
+        name="Revenue", 
+        marker_color=GREEN, 
+        opacity=0.85
+    ))
+    
+    fig_trend.add_trace(go.Bar(
+        x=years, 
+        y=df_master.loc["EBITDA", years].values.tolist(), 
+        name="EBITDA", 
+        marker_color=BLUE, 
+        opacity=0.85
+    ))
+    
+    fig_trend.add_trace(go.Scatter(
+        x=years, 
+        y=df_master.loc["Net Income", years].values.tolist(), 
+        name="Net Income", 
+        mode="lines+markers", 
+        line=dict(color=AMBER, width=3), 
+        marker=dict(size=8)
+    ))
     
     if len(hist_years_list) > 0 and len(forecast_year_labels) > 0:
-        fig_trend.add_vline(x=len(hist_years_list) - 0.5, line_dash="dash", line_color="#64748b", annotation_
+        fig_trend.add_vline(
+            x=len(hist_years_list) - 0.5, 
+            line_dash="dash", 
+            line_color="#64748b", 
+            annotation_text="Forecast →", 
+            annotation_position="top right", 
+            annotation_font_color="#94a3b8"
+        )
+    
+    fig_trend.update_layout(
+        template=DARK_TEMPLATE, 
+        barmode="group", 
+        title=f"Revenue, EBITDA & Net Income ({unit_suffix})", 
+        xaxis_title="Year", 
+        yaxis_title=unit_suffix, 
+        legend=dict(orientation="h", y=1.1), 
+        height=420
+    )
+    
+    st.plotly_chart(fig_trend, use_container_width=True)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        fig_fcf = go.Figure()
+        fcf_vals = df_master.loc["Free Cash Flow", years].values.tolist()
+        
+        fig_fcf.add_trace(go.Bar(
+            x=years, 
+            y=fcf_vals, 
+            marker_color=[GREEN if v >= 0 else RED for v in fcf_vals], 
+            name="FCF"
+        ))
+        
+        fig_fcf.add_trace(go.Scatter(
+            x=years, 
+            y=df_master.loc["Operating CF", years].values.tolist(), 
+            name="Operating CF", 
+            mode="lines+markers", 
+            line=dict(color=AMBER, width=2), 
+            marker=dict(size=6)
+        ))
+        
+        fig_fcf.update_layout(
+            template=DARK_TEMPLATE, 
+            title=f"Free Cash Flow vs Operating CF ({unit_suffix})", 
+            xaxis_title="Year", 
+            yaxis_title=unit_suffix, 
+            height=380
+        )
+        st.plotly_chart(fig_fcf, use_container_width=True)
+
+    with c2:
+        fig_margins = go.Figure()
+        
+        fig_margins.add_trace(go.Scatter(
+            x=years, 
+            y=df_master.loc["Gross Margin (%)", years].values.tolist(), 
+            name="Gross Margin", 
+            mode="lines+markers", 
+            line=dict(color=GREEN, width=3), 
+            marker=dict(size=7)
+        ))
+        
+        fig_margins.add_trace(go.Scatter(
+            x=years, 
+            y=df_master.loc["EBITDA Margin (%)", years].values.tolist(), 
+            name="EBITDA Margin", 
+            mode="lines+markers", 
+            line=dict(color=BLUE, width=3), 
+            marker=dict(size=7)
+        ))
+        
+        fig_margins.add_trace(go.Scatter(
+            x=years, 
+            y=df_master.loc["Net Margin (%)", years].values.tolist(), 
+            name="Net Margin", 
+            mode="lines+markers", 
+            line=dict(color=AMBER, width=3), 
+            marker=dict(size=7)
+        ))
+        
+        fig_margins.update_layout(
+            template=DARK_TEMPLATE, 
+            title="Margin Evolution (%)", 
+            xaxis_title="Year", 
+            yaxis_title="%", 
+            height=380
+        )
+        st.plotly_chart(fig_margins, use_container_width=True)
+
+    c3, c4 = st.columns(2)
+    with c3:
+        st.subheader(f"Balance Sheet ({unit_suffix})")
+        st.dataframe(df_master.loc[["Total Assets", "Current Assets", "Current Liabilities", "Total Debt", "Total Equity"]].style.format("{:,.1f}", na_rep="—"), use_container_width=True)
+    with c4:
+        st.subheader(f"Cash Flow Statement ({unit_suffix})")
+        st.dataframe(df_master.loc[["Operating CF", "CapEx", "Financing CF", "Free Cash Flow", "Net Cash Flow"]].style.format("{:,.1f}", na_rep="—"), use_container_width=True)
+
+with tab2:
+    st.subheader(f"Advanced Financial Metrics")
+    st.dataframe(kpi_df.style.format("{:,.2f}", na_rep="—"), use_container_width=True)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        fig_returns = go.Figure()
+        
+        fig_returns.add_trace(go.Bar(
+            x=years, 
+            y=kpi_df.loc["ROE (%)", years].values.tolist(), 
+            name="ROE (%)", 
+            marker_color=GREEN
+        ))
+        
+        fig_returns.add_trace(go.Bar(
+            x=years, 
+            y=kpi_df.loc["ROCE (%)", years].values.tolist(), 
+            name="ROCE (%)", 
+            marker_color=BLUE
+        ))
+        
+        fig_returns.update_layout(
+            template=DARK_TEMPLATE, 
+            barmode="group", 
+            title="Return on Capital Metrics (%)", 
+            xaxis_title="Year", 
+            yaxis_title="%", 
+            height=380
+        )
+        st.plotly_chart(fig_returns, use_container_width=True)
+
+    with c2:
+        fig_lev = go.Figure()
+        
+        fig_lev.add_trace(go.Scatter(
+            x=years, 
+            y=kpi_df.loc["Debt to Equity", years].values.tolist(), 
+            name="D/E Ratio", 
+            mode="lines+markers", 
+            line=dict(color=RED, width=3), 
+            marker=dict(size=8)
+        ))
+        
+        fig_lev.add_trace(go.Scatter(
+            x=years, 
+            y=kpi_df.loc["Current Ratio", years].values.tolist(), 
+            name="Current Ratio", 
+            mode="lines+markers", 
+            line=dict(color=GREEN, width=3), 
+            marker=dict(size=8)
+        ))
+        
+        fig_lev.update_layout(
+            template=DARK_TEMPLATE, 
+            title="Leverage & Liquidity Ratios", 
+            xaxis_title="Year", 
+            yaxis_title="Ratio (x)", 
+            height=380
+        )
+        st.plotly_chart(fig_lev, use_container_width=True)
+
+with tab3:
+    st.subheader("Discounted Cash Flow (DCF) Breakdown")
+    dcf_data = {
+        "Metric": ["Present Value of FCFs", "Terminal Value (TV)", "Present Value of TV", "Enterprise Value (EV)", "Less: Total Debt", "Add: Cash (Proxy)", "Equity Value", "Shares Outstanding", "Implied Share Price"],
+        f"Value ({unit_suffix})": [pv_fcf_total, terminal_value, pv_tv, enterprise_value, float(df_master.loc["Total Debt", base_yr]), float(df_master.loc["Current Assets", base_yr]), equity_value, shares, implied_share_price]
+    }
+    st.dataframe(pd.DataFrame(dcf_data).set_index("Metric").style.format("{:,.2f}", na_rep="—"), use_container_width=True)
+
+    st.divider()
+    st.subheader("🏗️ Enterprise Value Bridge (Waterfall)")
+    
+    net_debt_val = float(df_master.loc["Total Debt", base_yr]) - float(df_master.loc["Current Assets", base_yr])
+    
+    fig_bridge = go.Figure(go.Waterfall(
+        name="EV Bridge", 
+        orientation="v", 
+        measure=["relative", "relative", "total", "relative", "total"],
+        x=["PV of FCFs", "PV of Terminal Value", "Enterprise Value", "Less: Net Debt", "Equity Value"],
+        y=[pv_fcf_total, pv_tv, 0, -net_debt_val, 0],
+        connector={"line": {"color": "#475569"}}, 
+        increasing={"marker": {"color": GREEN}}, 
+        decreasing={"marker": {"color": RED}}, 
+        totals={"marker": {"color": "#3b82f6"}},
+        text=[
+            f"{unit_suffix} {pv_fcf_total:,.1f}", 
+            f"{unit_suffix} {pv_tv:,.1f}", 
+            f"{unit_suffix} {enterprise_value:,.1f}", 
+            f"({unit_suffix} {abs(net_debt_val):,.1f})" if net_debt_val > 0 else f"{unit_suffix} {abs(net_debt_val):,.1f}", 
+            f"{unit_suffix} {equity_value:,.1f}"
+        ],
+        textposition="outside"
+    ))
+    
+    fig_bridge.update_layout(
+        template=DARK_TEMPLATE, 
+        title=f"EV Bridge: PV of FCFs + Terminal Value → Equity Value ({unit_suffix})", 
+        yaxis_title=unit_suffix, 
+        height=480, 
+        showlegend=False
+    )
+    st.plotly_chart(fig_bridge, use_container_width=True)
+
+with tab4:
+    st.subheader("🎯 WACC × Terminal Growth Rate Sensitivity Analysis")
+    st.caption(f"Base case: WACC = {wacc_input}% | TGR = {tg_input}% | All values in {unit_suffix}")
+
+    col_sens1, col_sens2 = st.columns(2)
+    with col_sens1:
+        st.markdown(f"#### Enterprise Value Sensitivity ({unit_suffix})")
+        def color_ev_cell(val):
+            if pd.isna(val): return "background-color: #1e293b; color: #64748b;"
+            if val > enterprise_value * 1.05: return "background-color: #052e0a; color: #00b050; font-weight: bold;"
+            elif val > enterprise_value * 0.95: return "background-color: #0d2818; color: #86efac;"
+            elif val < enterprise_value * 0.90: return "background-color: #2d0a0a; color: #fca5a5;"
+            return "background-color: #1a1a2e; color: #cbd5e1;"
+        st.dataframe(sensitivity_ev.style.map(color_ev_cell).format("{:,.1f}", na_rep="N/A"), use_container_width=True)
+
+    with col_sens2:
+        st.markdown(f"#### Implied Share Price Sensitivity ({unit_suffix})")
+        def color_price_cell(val):
+            if pd.isna(val): return "background-color: #1e293b; color: #64748b;"
+            if implied_share_price != 0:
+                if val > implied_share_price * 1.10: return "background-color: #052e0a; color: #00b050; font-weight: bold;"
+                elif val > implied_share_price * 0.95: return "background-color: #0d2818; color: #86efac;"
+                elif val < implied_share_price * 0.85: return "background-color: #2d0a0a; color: #fca5a5;"
+            return "background-color: #1a1a2e; color: #cbd5e1;"
+        st.dataframe(sensitivity_price.style.map(color_price_cell).format("{:,.2f}", na_rep="N/A"), use_container_width=True)
+
+    st.divider()
+    st.subheader("🌡️ EV Sensitivity Heatmap")
+    ev_heatmap_data = sensitivity_ev.fillna(0).values.tolist()
+    
+    fig_heat = go.Figure(data=go.Heatmap(
+        z=ev_heatmap_data, 
+        x=[f"TGR {c}" for c in sensitivity_ev.columns], 
+        y=[f"WACC {r}" for r in sensitivity_ev.index],
+        colorscale=[[0.0, "#2d0a0a"], [0.3, "#7f1d1d"], [0.5, "#1a2e1a"], [0.7, "#14532d"], [1.0, "#00b050"]],
+        text=[[f"{unit_suffix}\n{v:,.0f}" if v != 0 else "N/A" for v in row] for row in ev_heatmap_data], 
+        texttemplate="%{text}", 
+        textfont={"size": 11}, 
+        hoverongaps=False
+    ))
+    
+    fig_heat.update_layout(
+        template=DARK_TEMPLATE, 
+        title=f"Enterprise Value Sensitivity ({unit_suffix})", 
+        xaxis_title="Terminal Growth Rate", 
+        yaxis_title="WACC", 
+        height=420
+    )
+    st.plotly_chart(fig_heat, use_container_width=True)
+
+with tab5:
+    st.info("📥 Export the fully-linked three-statement model, KPIs, DCF, and sensitivity matrix to Excel.")
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df_master.to_excel(writer, sheet_name='Three Statement Model', startrow=2)
+        kpi_df.to_excel(writer, sheet_name='Advanced KPIs', startrow=2)
+        pd.DataFrame(dcf_data).set_index("Metric").to_excel(writer, sheet_name='DCF Valuation', startrow=2)
+        sensitivity_ev.to_excel(writer, sheet_name='Sensitivity - EV', startrow=3)
+        sensitivity_price.to_excel(writer, sheet_name='Sensitivity - Price', startrow=3)
+    
+    output.seek(0)
+
+    st.download_button(
+        label="📥 Download Full Valuation Suite (.xlsx)",
+        data=output.getvalue(),
+        file_name=f"{display_name.replace(' ', '_')}_Valuation_Suite.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
