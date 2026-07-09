@@ -475,7 +475,7 @@ with tab5:
         c2.set_title({'name': f'Cash Flows ({unit_suffix})'})
         c2.set_legend({'position': 'bottom'})
         c2.set_plotarea({'border': {'color': '#cbd5e1'}})
-        ws_c.insert_chart('K7', c2, {'x_scale': 1.3, 'y_scale': 1.2})
+        ws_c.insert_chart('M7', c2, {'x_scale': 1.3, 'y_scale': 1.2})
         
         c3 = workbook.add_chart({'type': 'column'})
         ror, rcr = kpi_df.index.get_loc('ROE (%)') + 5, kpi_df.index.get_loc('ROCE (%)') + 5
