@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+import os
+import json
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -13,11 +15,31 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# --- SESSION STATE INITIALIZATION ---
 if 'initialized' not in st.session_state:
     st.session_state.clear()
     st.session_state['initialized'] = True
 
-# Safe CSS Injection
+if 's_rev' not in st.session_state: 
+    st.session_state.s_rev = 15.0
+if 's_cogs' not in st.session_state: 
+    st.session_state.s_cogs = 30.0
+if 's_tax' not in st.session_state: 
+    st.session_state.s_tax = 25.0
+if 's_wacc' not in st.session_state: 
+    st.session_state.s_wacc = 10.0
+if 's_tgr' not in st.session_state: 
+    st.session_state.s_tgr = 2.5
+if 's_end_yr' not in st.session_state: 
+    st.session_state.s_end_yr = 2023
+if 's_act_yr' not in st.session_state: 
+    st.session_state.s_act_yr = 2
+if 's_for_yr' not in st.session_state: 
+    st.session_state.s_for_yr = 5
+if 's_grid' not in st.session_state: 
+    st.session_state.s_grid = None
+
+# --- SAFE CSS INJECTION ---
 css_code = (
     "<style>\n"
     "#MainMenu {visibility: hidden;}\n"
@@ -95,13 +117,21 @@ with st.sidebar:
     with st.expander("⏳ Timeline Settings", expanded=True):
         t1, t2 = st.columns(2)
         end_hist_year = t1.number_input(
-            "Last Actual", value=2023, step=1
+            "Last Actual", 
+            value=st.session_state.s_end_yr, 
+            step=1
         )
         hist_years_count = t2.number_input(
-            "Actual Yrs", min_value=1, max_value=10, value=2
+            "Actual Yrs", 
+            min_value=1, 
+            max_value=10, 
+            value=st.session_state.s_act_yr
         )
         forecast_years = st.slider(
-            "Forecast Horizon", min_value=1, max_value=10, value=5
+            "Forecast Horizon", 
+            min_value=1, 
+            max_value=10, 
+            value=st.session_state.s_for_yr
         )
 
     hist_years_list = [
@@ -125,30 +155,112 @@ with st.sidebar:
         "Metric"
     )
 
+    if st.session_state.s_grid is not None:
+        start_grid = st.session_state.s_grid
+        
+        # Ensure column lengths match if timeline changed
+        for y in hist_years_list:
+            if y not in start_grid.columns:
+                start_grid[y] = 0.0
+                
+        start_grid = start_grid[hist_years_list]
+    else:
+        start_grid = hist_df_template
+
     with st.expander(
         f"🏢 Historical Actuals ({unit_suffix})", 
         expanded=True
     ):
         edited_hist_df = st.data_editor(
-            hist_df_template, use_container_width=True
+            start_grid, use_container_width=True
         )
 
     with st.expander("📈 Forecasting & Assumptions"):
         rev_growth_input = st.number_input(
-            "Revenue Growth (%)", value=15.0, step=1.0
+            "Revenue Growth (%)", 
+            value=st.session_state.s_rev, 
+            step=1.0
         )
         cogs_percent_input = st.number_input(
-            "COGS % of Revenue", value=30.0, step=1.0
+            "COGS % of Revenue", 
+            value=st.session_state.s_cogs, 
+            step=1.0
         )
         tax_input = st.number_input(
-            "Taxes (%)", value=25.0, step=1.0
+            "Taxes (%)", 
+            value=st.session_state.s_tax, 
+            step=1.0
         )
         wacc_input = st.number_input(
-            "WACC (%)", value=10.0, step=0.5
+            "WACC (%)", 
+            value=st.session_state.s_wacc, 
+            step=0.5
         )
         tg_input = st.number_input(
-            "Terminal Growth (%)", value=2.5, step=0.1
+            "Terminal Growth (%)", 
+            value=st.session_state.s_tgr, 
+            step=0.1
         )
+
+    st.divider()
+    
+    # --- HISTORY DATABASE MANAGER ---
+    st.subheader("🕰️ Model History")
+    db_file = "history_db.json"
+
+    def load_db():
+        if os.path.exists(db_file):
+            try:
+                with open(db_file, "r") as f:
+                    return json.load(f)
+            except:
+                return {}
+        return {}
+
+    hist_db = load_db()
+    hist_names = list(hist_db.keys())
+
+    if hist_names:
+        sel_hist = st.selectbox(
+            "Load Saved Model:", 
+            ["-- Select --"] + hist_names
+        )
+        if st.button("Load Data"):
+            if sel_hist != "-- Select --":
+                data = hist_db[sel_hist]
+                
+                st.session_state.s_rev = data.get("rev", 15.0)
+                st.session_state.s_cogs = data.get("cogs", 30.0)
+                st.session_state.s_tax = data.get("tax", 25.0)
+                st.session_state.s_wacc = data.get("wacc", 10.0)
+                st.session_state.s_tgr = data.get("tgr", 2.5)
+                
+                st.session_state.s_end_yr = data.get("end_y", 2023)
+                st.session_state.s_act_yr = data.get("act_y", 2)
+                st.session_state.s_for_yr = data.get("for_y", 5)
+                
+                grid_dict = data.get("grid", {})
+                st.session_state.s_grid = pd.DataFrame(grid_dict)
+                st.rerun()
+
+    save_name = st.text_input("Name this model:")
+    if st.button("Save Data"):
+        if save_name:
+            hist_db[save_name] = {
+                "rev": rev_growth_input,
+                "cogs": cogs_percent_input,
+                "tax": tax_input,
+                "wacc": wacc_input,
+                "tgr": tg_input,
+                "end_y": end_hist_year,
+                "act_y": hist_years_count,
+                "for_y": forecast_years,
+                "grid": edited_hist_df.to_dict()
+            }
+            with open(db_file, "w") as f:
+                json.dump(hist_db, f)
+            st.success(f"Saved '{save_name}'!")
+            st.rerun()
 
 # --- FINANCIAL ENGINE CORE ---
 years = hist_years_list + [
@@ -635,396 +747,4 @@ with tab1:
             yaxis_title=unit_suffix, 
             height=380
         )
-        st.plotly_chart(fig_fcf, use_container_width=True)
-
-    with c2:
-        fig_margins = go.Figure()
-        
-        fig_margins.add_trace(go.Scatter(
-            x=years, 
-            y=df_master.loc["Gross Margin (%)", years].tolist(), 
-            name="Gross Margin", 
-            mode="lines+markers", 
-            line=dict(color=GREEN, width=3)
-        ))
-        
-        fig_margins.add_trace(go.Scatter(
-            x=years, 
-            y=df_master.loc["EBITDA Margin (%)", years].tolist(), 
-            name="EBITDA Margin", 
-            mode="lines+markers", 
-            line=dict(color=BLUE, width=3)
-        ))
-        
-        fig_margins.add_trace(go.Scatter(
-            x=years, 
-            y=df_master.loc["Net Margin (%)", years].tolist(), 
-            name="Net Margin", 
-            mode="lines+markers", 
-            line=dict(color=AMBER, width=3)
-        ))
-        
-        fig_margins.update_layout(
-            template=DARK_TEMPLATE, 
-            title="Margins (%)", 
-            xaxis_title="Year", 
-            yaxis_title="%", 
-            height=380
-        )
-        st.plotly_chart(fig_margins, use_container_width=True)
-
-    c3, c4 = st.columns(2)
-    with c3:
-        st.subheader(f"Balance Sheet ({unit_suffix})")
-        bs_rows = [
-            "Total Assets", "Current Assets", 
-            "Current Liabilities", "Total Debt", "Total Equity"
-        ]
-        
-        bs_df = df_master.loc[bs_rows]
-        st.dataframe(
-            bs_df.style.format("{:,.1f}", na_rep="—"), 
-            use_container_width=True
-        )
-        
-    with c4:
-        st.subheader(f"Cash Flow ({unit_suffix})")
-        cf_rows = [
-            "Operating CF", "CapEx", "Financing CF", 
-            "Free Cash Flow", "Net Cash Flow"
-        ]
-        
-        cf_df = df_master.loc[cf_rows]
-        st.dataframe(
-            cf_df.style.format("{:,.1f}", na_rep="—"), 
-            use_container_width=True
-        )
-
-with tab2:
-    st.subheader(f"Advanced Financial Metrics")
-    st.dataframe(
-        kpi_df.style.format("{:,.2f}", na_rep="—"), 
-        use_container_width=True
-    )
-
-    c1, c2 = st.columns(2)
-    with c1:
-        fig_ret = go.Figure()
-        
-        fig_ret.add_trace(go.Bar(
-            x=years, 
-            y=kpi_df.loc["ROE (%)", years].values.tolist(), 
-            name="ROE (%)", 
-            marker_color=GREEN
-        ))
-        
-        fig_ret.add_trace(go.Bar(
-            x=years, 
-            y=kpi_df.loc["ROCE (%)", years].values.tolist(), 
-            name="ROCE (%)", 
-            marker_color=BLUE
-        ))
-        
-        fig_ret.update_layout(
-            template=DARK_TEMPLATE, 
-            barmode="group", 
-            title="Returns (%)", 
-            xaxis_title="Year", 
-            yaxis_title="%", 
-            height=380
-        )
-        st.plotly_chart(fig_ret, use_container_width=True)
-
-    with c2:
-        fig_lev = go.Figure()
-        
-        fig_lev.add_trace(go.Scatter(
-            x=years, 
-            y=kpi_df.loc["Debt to Equity", years].tolist(), 
-            name="D/E Ratio", 
-            mode="lines+markers", 
-            line=dict(color=RED, width=3)
-        ))
-        
-        fig_lev.add_trace(go.Scatter(
-            x=years, 
-            y=kpi_df.loc["Current Ratio", years].tolist(), 
-            name="Current Ratio", 
-            mode="lines+markers", 
-            line=dict(color=GREEN, width=3)
-        ))
-        
-        fig_lev.update_layout(
-            template=DARK_TEMPLATE, 
-            title="Ratios", 
-            xaxis_title="Year", 
-            yaxis_title="Ratio (x)", 
-            height=380
-        )
-        st.plotly_chart(fig_lev, use_container_width=True)
-
-with tab3:
-    st.subheader("DCF Breakdown")
-    
-    val_debt = float(df_master.loc["Total Debt", base_yr])
-    val_cash = float(df_master.loc["Current Assets", base_yr])
-    
-    dcf_data = {
-        "Metric": [
-            "PV of FCFs", "Terminal Value", "PV of TV", 
-            "Enterprise Value", "Less: Debt", "Add: Cash", 
-            "Equity Value", "Shares", "Implied Price"
-        ],
-        f"Value ({unit_suffix})": [
-            pv_fcf_total, terminal_value, pv_tv, 
-            enterprise_value, val_debt, val_cash, 
-            equity_value, shares, implied_share_price
-        ]
-    }
-    
-    dcf_df = pd.DataFrame(dcf_data).set_index("Metric")
-    st.dataframe(
-        dcf_df.style.format("{:,.2f}", na_rep="—"), 
-        use_container_width=True
-    )
-
-    st.divider()
-    st.subheader("🏗️ EV Bridge Waterfall")
-    
-    nd_val = val_debt - val_cash
-    
-    fig_br = go.Figure(go.Waterfall(
-        name="EV Bridge", 
-        orientation="v", 
-        measure=[
-            "relative", "relative", "total", "relative", "total"
-        ],
-        x=["PV FCF", "PV TV", "EV", "Net Debt", "Equity"],
-        y=[pv_fcf_total, pv_tv, 0, -nd_val, 0],
-        connector={"line": {"color": "#475569"}}, 
-        increasing={"marker": {"color": GREEN}}, 
-        decreasing={"marker": {"color": RED}}, 
-        totals={"marker": {"color": BLUE}},
-        text=[
-            f"{pv_fcf_total:,.1f}", 
-            f"{pv_tv:,.1f}", 
-            f"{enterprise_value:,.1f}", 
-            f"{abs(nd_val):,.1f}", 
-            f"{equity_value:,.1f}"
-        ],
-        textposition="outside"
-    ))
-    
-    fig_br.update_layout(
-        template=DARK_TEMPLATE, 
-        title=f"Bridge ({unit_suffix})", 
-        yaxis_title=unit_suffix, 
-        height=480, 
-        showlegend=False
-    )
-    st.plotly_chart(fig_br, use_container_width=True)
-
-with tab4:
-    st.subheader("🎯 Sensitivity Analysis")
-    st.caption(f"Base: WACC {wacc_input}% | TGR {tg_input}%")
-
-    col_sens1, col_sens2 = st.columns(2)
-    with col_sens1:
-        st.markdown(f"#### EV Sensitivity ({unit_suffix})")
-        
-        def color_ev_cell(val):
-            if pd.isna(val): 
-                return "background-color: #1e293b; color: #64748b;"
-            if val > enterprise_value * 1.05: 
-                return "background-color: #052e0a; color: #00b050;"
-            elif val > enterprise_value * 0.95: 
-                return "background-color: #0d2818; color: #86efac;"
-            elif val < enterprise_value * 0.90: 
-                return "background-color: #2d0a0a; color: #fca5a5;"
-            return "background-color: #1a1a2e; color: #cbd5e1;"
-            
-        ev_styled = sensitivity_ev.style.map(color_ev_cell)
-        st.dataframe(
-            ev_styled.format("{:,.1f}", na_rep="N/A"), 
-            use_container_width=True
-        )
-
-    with col_sens2:
-        st.markdown(f"#### Price Sensitivity ({unit_suffix})")
-        
-        def color_pr_cell(val):
-            if pd.isna(val): 
-                return "background-color: #1e293b; color: #64748b;"
-            if implied_share_price != 0:
-                if val > implied_share_price * 1.10: 
-                    return "background-color: #052e0a; color: green;"
-                elif val > implied_share_price * 0.95: 
-                    return "background-color: #0d2818; color: lime;"
-                elif val < implied_share_price * 0.85: 
-                    return "background-color: #2d0a0a; color: red;"
-            return "background-color: #1a1a2e; color: #cbd5e1;"
-            
-        pr_styled = sensitivity_price.style.map(color_pr_cell)
-        st.dataframe(
-            pr_styled.format("{:,.2f}", na_rep="N/A"), 
-            use_container_width=True
-        )
-
-    st.divider()
-    st.subheader("🌡️ Heatmap")
-    ev_heat = sensitivity_ev.fillna(0).values.tolist()
-    
-    safe_colors = [
-        [0.0, "#2d0a0a"],
-        [0.3, "#7f1d1d"],
-        [0.5, "#1a2e1a"],
-        [0.7, "#14532d"],
-        [1.0, "#00b050"]
-    ]
-    
-    txt_arr = []
-    for row in ev_heat:
-        new_row = []
-        for v in row:
-            if v != 0:
-                new_row.append(f"{unit_suffix}\n{v:,.0f}")
-            else:
-                new_row.append("N/A")
-        txt_arr.append(new_row)
-    
-    fig_heat = go.Figure(data=go.Heatmap(
-        z=ev_heat, 
-        x=[f"TGR {c}" for c in sensitivity_ev.columns], 
-        y=[f"WACC {r}" for r in sensitivity_ev.index],
-        colorscale=safe_colors,
-        text=txt_arr, 
-        texttemplate="%{text}", 
-        textfont={"size": 11}, 
-        hoverongaps=False
-    ))
-    
-    fig_heat.update_layout(
-        template=DARK_TEMPLATE, 
-        title=f"EV Sensitivity ({unit_suffix})", 
-        xaxis_title="TGR", 
-        yaxis_title="WACC", 
-        height=420
-    )
-    st.plotly_chart(fig_heat, use_container_width=True)
-
-# ============================================================
-# TAB 5 — EXCEL EXPORT (BOARDROOM READY)
-# ============================================================
-with tab5:
-    st.info("📥 Export boardroom-ready model to Excel.")
-    
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        workbook = writer.book
-        
-        # Corporate Formats
-        t_fmt = workbook.add_format({
-            'bold': True, 'font_size': 20, 
-            'font_color': '#00b050', 'font_name': 'Arial'
-        })
-        s_fmt = workbook.add_format({
-            'bold': True, 'font_size': 12, 
-            'font_color': '#64748b', 'font_name': 'Arial'
-        })
-        h_fmt = workbook.add_format({
-            'bold': True, 'bg_color': '#0f172a', 
-            'font_color': 'white', 'border': 1, 
-            'align': 'center', 'valign': 'vcenter'
-        })
-        i_fmt = workbook.add_format({
-            'bold': True, 'bg_color': '#f8fafc', 
-            'font_color': '#0f172a', 'border': 1,
-            'border_color': '#cbd5e1'
-        })
-        n_fmt = workbook.add_format({
-            'num_format': '#,##0.00', 'border': 1,
-            'border_color': '#cbd5e1'
-        })
-        p_fmt = workbook.add_format({
-            'num_format': '0.00"%"', 'border': 1,
-            'border_color': '#cbd5e1'
-        }) 
-
-        def write_sht(df, s_name, title, is_pct=False):
-            # Start at B5 (row 4, col 1) to create margins
-            df.to_excel(
-                writer, sheet_name=s_name, 
-                startrow=4, startcol=1
-            )
-            ws = writer.sheets[s_name]
-            ws.hide_gridlines(2)
-            
-            # Margin Column A
-            ws.set_column('A:A', 3)
-
-            d_name = display_name.upper() if display_name else "VALUATION"
-            ws.write('B2', d_name, t_fmt)
-            ws.write('B3', title, s_fmt)
-
-            # Index Column B
-            ws.set_column('B:B', 28, i_fmt)
-            
-            fmt = p_fmt if is_pct else n_fmt
-            
-            # Format Data Columns C+
-            for c_num, c_name in enumerate(df.columns):
-                # c_num=0 means column C (index 2)
-                ws.set_column(c_num + 2, c_num + 2, 15, fmt)
-                ws.write(4, c_num + 2, c_name, h_fmt)
-                
-            ws.write(4, 1, "Metric", h_fmt)
-
-        write_sht(df_master, 'Statements', f'Model ({unit_suffix})')
-        write_sht(kpi_df, 'KPIs', 'KPIs & Ratios')
-
-        d_df = pd.DataFrame(dcf_data).set_index("Metric")
-        write_sht(d_df, 'DCF', f'DCF ({unit_suffix})')
-
-        # Sensitivity EV 
-        sensitivity_ev.to_excel(
-            writer, sheet_name='Sens-EV', 
-            startrow=4, startcol=1
-        )
-        ws_ev = writer.sheets['Sens-EV']
-        ws_ev.hide_gridlines(2)
-        ws_ev.set_column('A:A', 3)
-        
-        d_name = display_name.upper() if display_name else "VALUATION"
-        ws_ev.write('B2', d_name, t_fmt)
-        ws_ev.write('B3', f'EV Sensitivity ({unit_suffix})', s_fmt)
-        ws_ev.set_column('B:B', 15, i_fmt)
-        
-        for c_num, c_name in enumerate(sensitivity_ev.columns):
-            ws_ev.set_column(c_num + 2, c_num + 2, 15, n_fmt)
-            ws_ev.write(4, c_num + 2, c_name, h_fmt)
-            
-        ws_ev.write(4, 1, "WACC \ TGR", h_fmt)
-        
-        c_fmt_dict = {
-            'type': '3_color_scale', 
-            'min_color': '#fca5a5', 
-            'mid_color': '#f8fafc', 
-            'max_color': '#86efac'
-        }
-        
-        # Apply heatmaps natively in Excel
-        ws_ev.conditional_format(
-            5, 2, 5 + len(sensitivity_ev.index) - 1, 
-            2 + len(sensitivity_ev.columns) - 1, 
-            c_fmt_dict
-        )
-
-        # Sensitivity Price
-        sensitivity_price.to_excel(
-            writer, sheet_name='Sens-Px', 
-            startrow=4, startcol=1
-        )
-        ws_pr = writer.sheets['Sens-Px']
-        ws_pr.hide_gridlines(2)
-        ws_pr.set_column('A:A', 3)
-        ws_pr.write('B2', d_name, t_fmt)
+        st.plotly_
