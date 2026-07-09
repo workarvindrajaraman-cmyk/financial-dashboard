@@ -157,12 +157,9 @@ with st.sidebar:
 
     if st.session_state.s_grid is not None:
         start_grid = st.session_state.s_grid
-        
-        # Ensure column lengths match if timeline changed
         for y in hist_years_list:
             if y not in start_grid.columns:
                 start_grid[y] = 0.0
-                
         start_grid = start_grid[hist_years_list]
     else:
         start_grid = hist_df_template
@@ -747,4 +744,486 @@ with tab1:
             yaxis_title=unit_suffix, 
             height=380
         )
-        st.plotly_
+        st.plotly_chart(fig_fcf, use_container_width=True)
+
+    with c2:
+        fig_margins = go.Figure()
+        
+        fig_margins.add_trace(go.Scatter(
+            x=years, 
+            y=df_master.loc["Gross Margin (%)", years].tolist(), 
+            name="Gross Margin", 
+            mode="lines+markers", 
+            line=dict(color=GREEN, width=3)
+        ))
+        
+        fig_margins.add_trace(go.Scatter(
+            x=years, 
+            y=df_master.loc["EBITDA Margin (%)", years].tolist(), 
+            name="EBITDA Margin", 
+            mode="lines+markers", 
+            line=dict(color=BLUE, width=3)
+        ))
+        
+        fig_margins.add_trace(go.Scatter(
+            x=years, 
+            y=df_master.loc["Net Margin (%)", years].tolist(), 
+            name="Net Margin", 
+            mode="lines+markers", 
+            line=dict(color=AMBER, width=3)
+        ))
+        
+        fig_margins.update_layout(
+            template=DARK_TEMPLATE, 
+            title="Margins (%)", 
+            xaxis_title="Year", 
+            yaxis_title="%", 
+            height=380
+        )
+        st.plotly_chart(fig_margins, use_container_width=True)
+
+    c3, c4 = st.columns(2)
+    with c3:
+        st.subheader(f"Balance Sheet ({unit_suffix})")
+        bs_rows = [
+            "Total Assets", "Current Assets", 
+            "Current Liabilities", "Total Debt", "Total Equity"
+        ]
+        
+        bs_df = df_master.loc[bs_rows]
+        st.dataframe(
+            bs_df.style.format("{:,.1f}", na_rep="—"), 
+            use_container_width=True
+        )
+        
+    with c4:
+        st.subheader(f"Cash Flow ({unit_suffix})")
+        cf_rows = [
+            "Operating CF", "CapEx", "Financing CF", 
+            "Free Cash Flow", "Net Cash Flow"
+        ]
+        
+        cf_df = df_master.loc[cf_rows]
+        st.dataframe(
+            cf_df.style.format("{:,.1f}", na_rep="—"), 
+            use_container_width=True
+        )
+
+with tab2:
+    st.subheader(f"Advanced Financial Metrics")
+    st.dataframe(
+        kpi_df.style.format("{:,.2f}", na_rep="—"), 
+        use_container_width=True
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        fig_ret = go.Figure()
+        
+        fig_ret.add_trace(go.Bar(
+            x=years, 
+            y=kpi_df.loc["ROE (%)", years].values.tolist(), 
+            name="ROE (%)", 
+            marker_color=GREEN
+        ))
+        
+        fig_ret.add_trace(go.Bar(
+            x=years, 
+            y=kpi_df.loc["ROCE (%)", years].values.tolist(), 
+            name="ROCE (%)", 
+            marker_color=BLUE
+        ))
+        
+        fig_ret.update_layout(
+            template=DARK_TEMPLATE, 
+            barmode="group", 
+            title="Returns (%)", 
+            xaxis_title="Year", 
+            yaxis_title="%", 
+            height=380
+        )
+        st.plotly_chart(fig_ret, use_container_width=True)
+
+    with c2:
+        fig_lev = go.Figure()
+        
+        fig_lev.add_trace(go.Scatter(
+            x=years, 
+            y=kpi_df.loc["Debt to Equity", years].tolist(), 
+            name="D/E Ratio", 
+            mode="lines+markers", 
+            line=dict(color=RED, width=3)
+        ))
+        
+        fig_lev.add_trace(go.Scatter(
+            x=years, 
+            y=kpi_df.loc["Current Ratio", years].tolist(), 
+            name="Current Ratio", 
+            mode="lines+markers", 
+            line=dict(color=GREEN, width=3)
+        ))
+        
+        fig_lev.update_layout(
+            template=DARK_TEMPLATE, 
+            title="Ratios", 
+            xaxis_title="Year", 
+            yaxis_title="Ratio (x)", 
+            height=380
+        )
+        st.plotly_chart(fig_lev, use_container_width=True)
+
+with tab3:
+    st.subheader("DCF Breakdown")
+    
+    val_debt = float(df_master.loc["Total Debt", base_yr])
+    val_cash = float(df_master.loc["Current Assets", base_yr])
+    
+    dcf_data = {
+        "Metric": [
+            "PV of FCFs", "Terminal Value", "PV of TV", 
+            "Enterprise Value", "Less: Debt", "Add: Cash", 
+            "Equity Value", "Shares", "Implied Price"
+        ],
+        f"Value ({unit_suffix})": [
+            pv_fcf_total, terminal_value, pv_tv, 
+            enterprise_value, val_debt, val_cash, 
+            equity_value, shares, implied_share_price
+        ]
+    }
+    
+    dcf_df = pd.DataFrame(dcf_data).set_index("Metric")
+    st.dataframe(
+        dcf_df.style.format("{:,.2f}", na_rep="—"), 
+        use_container_width=True
+    )
+
+    st.divider()
+    st.subheader("🏗️ EV Bridge Waterfall")
+    
+    nd_val = val_debt - val_cash
+    
+    fig_br = go.Figure(go.Waterfall(
+        name="EV Bridge", 
+        orientation="v", 
+        measure=[
+            "relative", "relative", "total", "relative", "total"
+        ],
+        x=["PV FCF", "PV TV", "EV", "Net Debt", "Equity"],
+        y=[pv_fcf_total, pv_tv, 0, -nd_val, 0],
+        connector={"line": {"color": "#475569"}}, 
+        increasing={"marker": {"color": GREEN}}, 
+        decreasing={"marker": {"color": RED}}, 
+        totals={"marker": {"color": BLUE}},
+        text=[
+            f"{pv_fcf_total:,.1f}", 
+            f"{pv_tv:,.1f}", 
+            f"{enterprise_value:,.1f}", 
+            f"{abs(nd_val):,.1f}", 
+            f"{equity_value:,.1f}"
+        ],
+        textposition="outside"
+    ))
+    
+    fig_br.update_layout(
+        template=DARK_TEMPLATE, 
+        title=f"Bridge ({unit_suffix})", 
+        yaxis_title=unit_suffix, 
+        height=480, 
+        showlegend=False
+    )
+    st.plotly_chart(fig_br, use_container_width=True)
+
+with tab4:
+    st.subheader("🎯 Sensitivity Analysis")
+    st.caption(f"Base: WACC {wacc_input}% | TGR {tg_input}%")
+
+    col_sens1, col_sens2 = st.columns(2)
+    with col_sens1:
+        st.markdown(f"#### EV Sensitivity ({unit_suffix})")
+        
+        def color_ev_cell(val):
+            if pd.isna(val): 
+                return "background-color: #1e293b; color: #64748b;"
+            if val > enterprise_value * 1.05: 
+                return "background-color: #052e0a; color: #00b050;"
+            elif val > enterprise_value * 0.95: 
+                return "background-color: #0d2818; color: #86efac;"
+            elif val < enterprise_value * 0.90: 
+                return "background-color: #2d0a0a; color: #fca5a5;"
+            return "background-color: #1a1a2e; color: #cbd5e1;"
+            
+        ev_styled = sensitivity_ev.style.map(color_ev_cell)
+        st.dataframe(
+            ev_styled.format("{:,.1f}", na_rep="N/A"), 
+            use_container_width=True
+        )
+
+    with col_sens2:
+        st.markdown(f"#### Price Sensitivity ({unit_suffix})")
+        
+        def color_pr_cell(val):
+            if pd.isna(val): 
+                return "background-color: #1e293b; color: #64748b;"
+            if implied_share_price != 0:
+                if val > implied_share_price * 1.10: 
+                    return "background-color: #052e0a; color: green;"
+                elif val > implied_share_price * 0.95: 
+                    return "background-color: #0d2818; color: lime;"
+                elif val < implied_share_price * 0.85: 
+                    return "background-color: #2d0a0a; color: red;"
+            return "background-color: #1a1a2e; color: #cbd5e1;"
+            
+        pr_styled = sensitivity_price.style.map(color_pr_cell)
+        st.dataframe(
+            pr_styled.format("{:,.2f}", na_rep="N/A"), 
+            use_container_width=True
+        )
+
+    st.divider()
+    st.subheader("🌡️ Heatmap")
+    ev_heat = sensitivity_ev.fillna(0).values.tolist()
+    
+    safe_colors = [
+        [0.0, "#2d0a0a"],
+        [0.3, "#7f1d1d"],
+        [0.5, "#1a2e1a"],
+        [0.7, "#14532d"],
+        [1.0, "#00b050"]
+    ]
+    
+    txt_arr = []
+    for row in ev_heat:
+        new_row = []
+        for v in row:
+            if v != 0:
+                new_row.append(f"{unit_suffix}\n{v:,.0f}")
+            else:
+                new_row.append("N/A")
+        txt_arr.append(new_row)
+    
+    fig_heat = go.Figure(data=go.Heatmap(
+        z=ev_heat, 
+        x=[f"TGR {c}" for c in sensitivity_ev.columns], 
+        y=[f"WACC {r}" for r in sensitivity_ev.index],
+        colorscale=safe_colors,
+        text=txt_arr, 
+        texttemplate="%{text}", 
+        textfont={"size": 11}, 
+        hoverongaps=False
+    ))
+    
+    fig_heat.update_layout(
+        template=DARK_TEMPLATE, 
+        title=f"EV Sensitivity ({unit_suffix})", 
+        xaxis_title="TGR", 
+        yaxis_title="WACC", 
+        height=420
+    )
+    st.plotly_chart(fig_heat, use_container_width=True)
+
+# ============================================================
+# TAB 5 — EXCEL EXPORT (BOARDROOM READY)
+# ============================================================
+with tab5:
+    st.info("📥 Export boardroom-ready model to Excel.")
+    
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        workbook = writer.book
+        
+        t_fmt = workbook.add_format({
+            'bold': True, 'font_size': 20, 
+            'font_color': '#00b050', 'font_name': 'Arial'
+        })
+        s_fmt = workbook.add_format({
+            'bold': True, 'font_size': 12, 
+            'font_color': '#64748b', 'font_name': 'Arial'
+        })
+        h_fmt = workbook.add_format({
+            'bold': True, 'bg_color': '#0f172a', 
+            'font_color': 'white', 'border': 1, 
+            'align': 'center', 'valign': 'vcenter'
+        })
+        i_fmt = workbook.add_format({
+            'bold': True, 'bg_color': '#f8fafc', 
+            'font_color': '#0f172a', 'border': 1,
+            'border_color': '#cbd5e1'
+        })
+        n_fmt = workbook.add_format({
+            'num_format': '#,##0.00', 'border': 1,
+            'border_color': '#cbd5e1'
+        })
+        p_fmt = workbook.add_format({
+            'num_format': '0.00"%"', 'border': 1,
+            'border_color': '#cbd5e1'
+        }) 
+
+        def write_sht(df, s_name, title, is_pct=False):
+            df.to_excel(
+                writer, sheet_name=s_name, 
+                startrow=4, startcol=1
+            )
+            ws = writer.sheets[s_name]
+            ws.hide_gridlines(2)
+            
+            ws.set_column('A:A', 3)
+
+            d_name = display_name.upper() if display_name else "VAL"
+            ws.write('B2', d_name, t_fmt)
+            ws.write('B3', title, s_fmt)
+
+            ws.set_column('B:B', 28, i_fmt)
+            
+            fmt = p_fmt if is_pct else n_fmt
+            
+            for c_num, c_name in enumerate(df.columns):
+                ws.set_column(c_num + 2, c_num + 2, 15, fmt)
+                ws.write(4, c_num + 2, c_name, h_fmt)
+                
+            ws.write(4, 1, "Metric", h_fmt)
+
+        write_sht(df_master, 'Statements', f'Model ({unit_suffix})')
+        write_sht(kpi_df, 'KPIs', 'KPIs & Ratios')
+
+        d_df = pd.DataFrame(dcf_data).set_index("Metric")
+        write_sht(d_df, 'DCF', f'DCF ({unit_suffix})')
+
+        sensitivity_ev.to_excel(
+            writer, sheet_name='Sens-EV', 
+            startrow=4, startcol=1
+        )
+        ws_ev = writer.sheets['Sens-EV']
+        ws_ev.hide_gridlines(2)
+        ws_ev.set_column('A:A', 3)
+        
+        d_name = display_name.upper() if display_name else "VAL"
+        ws_ev.write('B2', d_name, t_fmt)
+        ws_ev.write('B3', f'EV Sens ({unit_suffix})', s_fmt)
+        ws_ev.set_column('B:B', 15, i_fmt)
+        
+        for c_num, c_name in enumerate(sensitivity_ev.columns):
+            ws_ev.set_column(c_num + 2, c_num + 2, 15, n_fmt)
+            ws_ev.write(4, c_num + 2, c_name, h_fmt)
+            
+        ws_ev.write(4, 1, "WACC \ TGR", h_fmt)
+        
+        c_fmt_dict = {
+            'type': '3_color_scale', 
+            'min_color': '#fca5a5', 
+            'mid_color': '#f8fafc', 
+            'max_color': '#86efac'
+        }
+        
+        ws_ev.conditional_format(
+            5, 2, 5 + len(sensitivity_ev.index) - 1, 
+            2 + len(sensitivity_ev.columns) - 1, 
+            c_fmt_dict
+        )
+
+        sensitivity_price.to_excel(
+            writer, sheet_name='Sens-Px', 
+            startrow=4, startcol=1
+        )
+        ws_pr = writer.sheets['Sens-Px']
+        ws_pr.hide_gridlines(2)
+        ws_pr.set_column('A:A', 3)
+        ws_pr.write('B2', d_name, t_fmt)
+        ws_pr.write('B3', f'Px Sens ({unit_suffix})', s_fmt)
+        ws_pr.set_column('B:B', 15, i_fmt)
+        
+        for c_num, c_name in enumerate(sensitivity_price.columns):
+            ws_pr.set_column(c_num + 2, c_num + 2, 15, n_fmt)
+            ws_pr.write(4, c_num + 2, c_name, h_fmt)
+            
+        ws_pr.write(4, 1, "WACC \ TGR", h_fmt)
+        
+        ws_pr.conditional_format(
+            5, 2, 5 + len(sensitivity_price.index) - 1, 
+            2 + len(sensitivity_price.columns) - 1, 
+            c_fmt_dict
+        )
+
+        ws_c = workbook.add_worksheet('Visuals')
+        ws_c.hide_gridlines(2)
+        ws_c.set_column('A:A', 3)
+        ws_c.write('B2', d_name, t_fmt)
+        ws_c.write('B3', 'Visual Analytics Deck', s_fmt)
+        
+        ny = len(years)
+
+        c1 = workbook.add_chart({'type': 'column'})
+        rr = df_master.index.get_loc('Revenue') + 5
+        er = df_master.index.get_loc('EBITDA') + 5
+        
+        c1.add_series({
+            'name': ['Statements', rr, 1],
+            'categories': ['Statements', 4, 2, 4, 1 + ny],
+            'values': ['Statements', rr, 2, rr, 1 + ny],
+            'fill': {'color': '#00b050'}
+        })
+        c1.add_series({
+            'name': ['Statements', er, 1],
+            'categories': ['Statements', 4, 2, 4, 1 + ny],
+            'values': ['Statements', er, 2, er, 1 + ny],
+            'fill': {'color': '#3b82f6'}
+        })
+        c1.set_title({'name': f'Rev vs EBITDA ({unit_suffix})'})
+        c1.set_legend({'position': 'bottom'})
+        c1.set_plotarea({'border': {'color': '#cbd5e1'}})
+        
+        ws_c.insert_chart('B7', c1, {'x_scale': 1.3, 'y_scale': 1.2})
+        
+        c2 = workbook.add_chart({'type': 'line'})
+        fr = df_master.index.get_loc('Free Cash Flow') + 5
+        orw = df_master.index.get_loc('Operating CF') + 5
+        
+        c2.add_series({
+            'name': ['Statements', fr, 1],
+            'categories': ['Statements', 4, 2, 4, 1 + ny],
+            'values': ['Statements', fr, 2, fr, 1 + ny],
+            'line': {'color': '#00b050', 'width': 2.5}
+        })
+        c2.add_series({
+            'name': ['Statements', orw, 1],
+            'categories': ['Statements', 4, 2, 4, 1 + ny],
+            'values': ['Statements', orw, 2, orw, 1 + ny],
+            'line': {'color': '#f59e0b', 'width': 2.5}
+        })
+        c2.set_title({'name': f'Cash Flows ({unit_suffix})'})
+        c2.set_legend({'position': 'bottom'})
+        c2.set_plotarea({'border': {'color': '#cbd5e1'}})
+        
+        ws_c.insert_chart('K7', c2, {'x_scale': 1.3, 'y_scale': 1.2})
+        
+        c3 = workbook.add_chart({'type': 'column'})
+        ror = kpi_df.index.get_loc('ROE (%)') + 5
+        rcr = kpi_df.index.get_loc('ROCE (%)') + 5
+        
+        c3.add_series({
+            'name': ['KPIs', ror, 1],
+            'categories': ['KPIs', 4, 2, 4, 1 + ny],
+            'values': ['KPIs', ror, 2, ror, 1 + ny],
+            'fill': {'color': '#00b050'}
+        })
+        c3.add_series({
+            'name': ['KPIs', rcr, 1],
+            'categories': ['KPIs', 4, 2, 4, 1 + ny],
+            'values': ['KPIs', rcr, 2, rcr, 1 + ny],
+            'fill': {'color': '#3b82f6'}
+        })
+        c3.set_title({'name': 'Returns (%)'})
+        c3.set_legend({'position': 'bottom'})
+        c3.set_plotarea({'border': {'color': '#cbd5e1'}})
+        
+        ws_c.insert_chart('B26', c3, {'x_scale': 1.3, 'y_scale': 1.2})
+        
+    output.seek(0)
+
+    f_name = f"{display_name.replace(' ', '_')}_Model.xlsx"
+    st.download_button(
+        label="📥 Download Full Valuation Suite (.xlsx)",
+        data=output.getvalue(),
+        file_name=f_name,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
