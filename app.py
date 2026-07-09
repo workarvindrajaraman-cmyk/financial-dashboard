@@ -17,49 +17,41 @@ if 'initialized' not in st.session_state:
     st.session_state.clear()
     st.session_state['initialized'] = True
 
-st.markdown("""
-    <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    thead tr th { 
-        background-color: #00b050 !important; 
-        color: white !important; 
-        font-weight: bold !important; 
-        font-size: 14px; 
-    }
-    .stTabs [data-baseweb="tab-list"] { 
-        gap: 24px; 
-    }
-    .stTabs [data-baseweb="tab"] { 
-        height: 50px; 
-        background-color: transparent; 
-        font-size: 16px; 
-        font-weight: 600; 
-        color: #94a3b8; 
-    }
-    .stTabs [data-baseweb="tab"][aria-selected="true"] { 
-        color: #00b050 !important; 
-        border-bottom-color: #00b050 !important; 
-    }
-    div[data-testid="stMetricValue"] { 
-        color: #00b050; 
-    }
-    div.stButton > button:first-child, 
-    div.stDownloadButton > button:first-child { 
-        background-color: #00b050 !important; 
-        color: white !important; 
-        border: none !important; 
-    }
-    .ai-box { 
-        background-color: #0e1117; 
-        border-left: 4px solid #00b050; 
-        padding: 15px; 
-        border-radius: 5px; 
-        margin-bottom: 20px; 
-        font-style: italic; 
-    }
-    </style>
-    """, unsafe_allow_html=True)
+# Safe CSS Injection
+css_code = (
+    "<style>\n"
+    "#MainMenu {visibility: hidden;}\n"
+    "footer {visibility: hidden;}\n"
+    "thead tr th { \n"
+    "    background-color: #00b050 !important; \n"
+    "    color: white !important; \n"
+    "    font-weight: bold !important; \n"
+    "    font-size: 14px; \n"
+    "}\n"
+    ".stTabs [data-baseweb=\"tab-list\"] { gap: 24px; }\n"
+    ".stTabs [data-baseweb=\"tab\"] { \n"
+    "    height: 50px; background-color: transparent; \n"
+    "    font-size: 16px; font-weight: 600; color: #94a3b8; \n"
+    "}\n"
+    ".stTabs [data-baseweb=\"tab\"][aria-selected=\"true\"] { \n"
+    "    color: #00b050 !important; \n"
+    "    border-bottom-color: #00b050 !important; \n"
+    "}\n"
+    "div[data-testid=\"stMetricValue\"] { color: #00b050; }\n"
+    "div.stButton > button:first-child, \n"
+    "div.stDownloadButton > button:first-child { \n"
+    "    background-color: #00b050 !important; \n"
+    "    color: white !important; border: none !important; \n"
+    "}\n"
+    ".ai-box { \n"
+    "    background-color: #0e1117; \n"
+    "    border-left: 4px solid #00b050; \n"
+    "    padding: 15px; border-radius: 5px; \n"
+    "    margin-bottom: 20px; font-style: italic; \n"
+    "}\n"
+    "</style>"
+)
+st.markdown(css_code, unsafe_allow_html=True)
 
 # --- PORTFOLIO BRANDING ---
 with st.sidebar:
@@ -921,61 +913,97 @@ with tab4:
     st.plotly_chart(fig_heat, use_container_width=True)
 
 # ============================================================
-# TAB 5 — EXCEL EXPORT
+# TAB 5 — EXCEL EXPORT (BOARDROOM READY)
 # ============================================================
 with tab5:
-    st.info("📥 Export full model to Excel.")
+    st.info("📥 Export boardroom-ready model to Excel.")
     
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
         
+        # Corporate Formats
         t_fmt = workbook.add_format({
-            'bold': True, 'font_size': 20, 'font_color': '#00b050'
+            'bold': True, 'font_size': 20, 
+            'font_color': '#00b050', 'font_name': 'Arial'
         })
         s_fmt = workbook.add_format({
-            'bold': True, 'font_size': 12, 'font_color': '#64748b'
+            'bold': True, 'font_size': 12, 
+            'font_color': '#64748b', 'font_name': 'Arial'
         })
         h_fmt = workbook.add_format({
             'bold': True, 'bg_color': '#0f172a', 
-            'font_color': 'white', 'border': 1, 'align': 'center'
+            'font_color': 'white', 'border': 1, 
+            'align': 'center', 'valign': 'vcenter'
         })
         i_fmt = workbook.add_format({
-            'bold': True, 'bg_color': '#f1f5f9', 'border': 1
+            'bold': True, 'bg_color': '#f8fafc', 
+            'font_color': '#0f172a', 'border': 1,
+            'border_color': '#cbd5e1'
         })
         n_fmt = workbook.add_format({
-            'num_format': '#,##0.00', 'border': 1
+            'num_format': '#,##0.00', 'border': 1,
+            'border_color': '#cbd5e1'
         })
         p_fmt = workbook.add_format({
-            'num_format': '0.00"%"', 'border': 1
+            'num_format': '0.00"%"', 'border': 1,
+            'border_color': '#cbd5e1'
         }) 
 
         def write_sht(df, s_name, title, is_pct=False):
-            df.to_excel(writer, sheet_name=s_name, startrow=3)
+            # Start at B5 (row 4, col 1) to create margins
+            df.to_excel(
+                writer, sheet_name=s_name, 
+                startrow=4, startcol=1
+            )
             ws = writer.sheets[s_name]
             ws.hide_gridlines(2)
+            
+            # Margin Column A
+            ws.set_column('A:A', 3)
 
             d_name = display_name.upper() if display_name else "VALUATION"
-            ws.write('A1', d_name, t_fmt)
-            ws.write('A2', title, s_fmt)
+            ws.write('B2', d_name, t_fmt)
+            ws.write('B3', title, s_fmt)
 
-            ws.set_column('A:A', 28, i_fmt)
+            # Index Column B
+            ws.set_column('B:B', 28, i_fmt)
+            
             fmt = p_fmt if is_pct else n_fmt
             
+            # Format Data Columns C+
             for c_num, c_name in enumerate(df.columns):
-                ws.set_column(c_num + 1, c_num + 1, 14, fmt)
-                ws.write(3, c_num + 1, c_name, h_fmt)
-            ws.write(3, 0, "Metric", h_fmt)
+                # c_num=0 means column C (index 2)
+                ws.set_column(c_num + 2, c_num + 2, 15, fmt)
+                ws.write(4, c_num + 2, c_name, h_fmt)
+                
+            ws.write(4, 1, "Metric", h_fmt)
 
         write_sht(df_master, 'Statements', f'Model ({unit_suffix})')
         write_sht(kpi_df, 'KPIs', 'KPIs & Ratios')
 
         d_df = pd.DataFrame(dcf_data).set_index("Metric")
         write_sht(d_df, 'DCF', f'DCF ({unit_suffix})')
-        writer.sheets['DCF'].set_column('B:B', 20, n_fmt)
 
-        write_sht(sensitivity_ev, 'Sens-EV', f'EV ({unit_suffix})')
+        # Sensitivity EV 
+        sensitivity_ev.to_excel(
+            writer, sheet_name='Sens-EV', 
+            startrow=4, startcol=1
+        )
         ws_ev = writer.sheets['Sens-EV']
+        ws_ev.hide_gridlines(2)
+        ws_ev.set_column('A:A', 3)
+        
+        d_name = display_name.upper() if display_name else "VALUATION"
+        ws_ev.write('B2', d_name, t_fmt)
+        ws_ev.write('B3', f'EV Sensitivity ({unit_suffix})', s_fmt)
+        ws_ev.set_column('B:B', 15, i_fmt)
+        
+        for c_num, c_name in enumerate(sensitivity_ev.columns):
+            ws_ev.set_column(c_num + 2, c_num + 2, 15, n_fmt)
+            ws_ev.write(4, c_num + 2, c_name, h_fmt)
+            
+        ws_ev.write(4, 1, "WACC \ TGR", h_fmt)
         
         c_fmt_dict = {
             'type': '3_color_scale', 
@@ -984,95 +1012,19 @@ with tab5:
             'max_color': '#86efac'
         }
         
+        # Apply heatmaps natively in Excel
         ws_ev.conditional_format(
-            4, 1, 4 + len(sensitivity_ev.index) - 1, 
-            len(sensitivity_ev.columns), c_fmt_dict
+            5, 2, 5 + len(sensitivity_ev.index) - 1, 
+            2 + len(sensitivity_ev.columns) - 1, 
+            c_fmt_dict
         )
-        ws_ev.write(3, 0, "WACC \ TGR", h_fmt)
 
-        write_sht(sensitivity_price, 'Sens-Px', f'Px ({unit_suffix})')
+        # Sensitivity Price
+        sensitivity_price.to_excel(
+            writer, sheet_name='Sens-Px', 
+            startrow=4, startcol=1
+        )
         ws_pr = writer.sheets['Sens-Px']
-        ws_pr.conditional_format(
-            4, 1, 4 + len(sensitivity_price.index) - 1, 
-            len(sensitivity_price.columns), c_fmt_dict
-        )
-        ws_pr.write(3, 0, "WACC \ TGR", h_fmt)
-
-        ws_c = workbook.add_worksheet('Charts')
-        ws_c.hide_gridlines(2)
-        d_name = display_name.upper() if display_name else "VALUATION"
-        ws_c.write('A1', d_name, t_fmt)
-        ws_c.write('A2', 'Visuals', s_fmt)
-        
-        ny = len(years)
-
-        c1 = workbook.add_chart({'type': 'column'})
-        rr = df_master.index.get_loc('Revenue') + 4
-        er = df_master.index.get_loc('EBITDA') + 4
-        
-        c1.add_series({
-            'name': ['Statements', rr, 0],
-            'categories': ['Statements', 3, 1, 3, ny],
-            'values': ['Statements', rr, 1, rr, ny],
-            'fill': {'color': '#00b050'}
-        })
-        c1.add_series({
-            'name': ['Statements', er, 0],
-            'categories': ['Statements', 3, 1, 3, ny],
-            'values': ['Statements', er, 1, er, ny],
-            'fill': {'color': '#3b82f6'}
-        })
-        c1.set_title({'name': f'Rev vs EBITDA ({unit_suffix})'})
-        c1.set_legend({'position': 'bottom'})
-        ws_c.insert_chart('B5', c1, {'x_scale': 1.4, 'y_scale': 1.2})
-        
-        c2 = workbook.add_chart({'type': 'line'})
-        fr = df_master.index.get_loc('Free Cash Flow') + 4
-        orw = df_master.index.get_loc('Operating CF') + 4
-        
-        c2.add_series({
-            'name': ['Statements', fr, 0],
-            'categories': ['Statements', 3, 1, 3, ny],
-            'values': ['Statements', fr, 1, fr, ny],
-            'line': {'color': '#00b050', 'width': 2.5}
-        })
-        c2.add_series({
-            'name': ['Statements', orw, 0],
-            'categories': ['Statements', 3, 1, 3, ny],
-            'values': ['Statements', orw, 1, orw, ny],
-            'line': {'color': '#f59e0b', 'width': 2.5}
-        })
-        c2.set_title({'name': f'Cash Flows ({unit_suffix})'})
-        c2.set_legend({'position': 'bottom'})
-        ws_c.insert_chart('L5', c2, {'x_scale': 1.4, 'y_scale': 1.2})
-        
-        c3 = workbook.add_chart({'type': 'column'})
-        ror = kpi_df.index.get_loc('ROE (%)') + 4
-        rcr = kpi_df.index.get_loc('ROCE (%)') + 4
-        
-        c3.add_series({
-            'name': ['KPIs', ror, 0],
-            'categories': ['KPIs', 3, 1, 3, ny],
-            'values': ['KPIs', ror, 1, ror, ny],
-            'fill': {'color': '#00b050'}
-        })
-        c3.add_series({
-            'name': ['KPIs', rcr, 0],
-            'categories': ['KPIs', 3, 1, 3, ny],
-            'values': ['KPIs', rcr, 1, rcr, ny],
-            'fill': {'color': '#3b82f6'}
-        })
-        c3.set_title({'name': 'Returns (%)'})
-        c3.set_legend({'position': 'bottom'})
-        ws_c.insert_chart('B22', c3, {'x_scale': 1.4, 'y_scale': 1.2})
-        
-    output.seek(0)
-
-    f_name = f"{display_name.replace(' ', '_')}_Model.xlsx"
-    st.download_button(
-        label="📥 Download Excel (.xlsx)",
-        data=output.getvalue(),
-        file_name=f_name,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-    )
+        ws_pr.hide_gridlines(2)
+        ws_pr.set_column('A:A', 3)
+        ws_pr.write('B2', d_name, t_fmt)
