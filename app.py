@@ -67,7 +67,10 @@ with st.sidebar:
     st.caption("Developed by: **Arvind Rajaraman**")
     st.divider()
 
-if st.sidebar.button("➕ Start New Model (Clear Data)", use_container_width=True):
+if st.sidebar.button(
+    "➕ Start New Model", 
+    use_container_width=True
+):
     st.session_state.clear()
     st.rerun()
 
@@ -86,11 +89,12 @@ with st.sidebar:
         index=0, 
         horizontal=True
     )
+    
     input_scale = st.radio(
         "Data Input Format:", 
-        [f"Already in {unit}", "Raw Values (Needs Scaling)"], 
+        ["Already Formatted", "Raw Values"], 
         index=0, 
-        help="If raw, engine will divide automatically."
+        help="If raw, engine divides automatically."
     )
     unit_suffix = "₹ Cr" if unit == "Crores" else "₹ L"
 
@@ -99,10 +103,10 @@ with st.sidebar:
     with st.expander("⏳ Timeline Settings", expanded=True):
         t1, t2 = st.columns(2)
         end_hist_year = t1.number_input(
-            "Last Actual Year", value=2023, step=1
+            "Last Actual", value=2023, step=1
         )
         hist_years_count = t2.number_input(
-            "Actual Years", min_value=1, max_value=10, value=2, step=1
+            "Actual Yrs", min_value=1, max_value=10, value=2
         )
         forecast_years = st.slider(
             "Forecast Horizon", min_value=1, max_value=10, value=5
@@ -114,37 +118,44 @@ with st.sidebar:
     ]
 
     metrics = [
-        "Revenue", "COGS", "S&G Expenses", "Depreciation", "Interest",
-        "Current Assets", "Total Assets", "Current Liabilities", 
-        "Total Debt", "Total Equity",
-        "Operating CF", "CapEx", "Financing CF", "Shares Outstanding"
+        "Revenue", "COGS", "S&G Expenses", "Depreciation", 
+        "Interest", "Current Assets", "Total Assets", 
+        "Current Liabilities", "Total Debt", "Total Equity",
+        "Operating CF", "CapEx", "Financing CF", 
+        "Shares Outstanding"
     ]
+    
     default_data = {"Metric": metrics}
     for y in hist_years_list:
         default_data[y] = [0.0] * len(metrics)
 
-    hist_df_template = pd.DataFrame(default_data).set_index("Metric")
+    hist_df_template = pd.DataFrame(default_data).set_index(
+        "Metric"
+    )
 
-    with st.expander(f"🏢 Historical Actuals ({unit_suffix})", expanded=True):
+    with st.expander(
+        f"🏢 Historical Actuals ({unit_suffix})", 
+        expanded=True
+    ):
         edited_hist_df = st.data_editor(
             hist_df_template, use_container_width=True
         )
 
-    with st.expander("📈 Forecasting & DCF Assumptions"):
+    with st.expander("📈 Forecasting & Assumptions"):
         rev_growth_input = st.number_input(
-            "Forecast Revenue Growth (%)", value=15.0, step=1.0
+            "Revenue Growth (%)", value=15.0, step=1.0
         )
         cogs_percent_input = st.number_input(
-            "Forecast COGS % of Revenue", value=30.0, step=1.0
+            "COGS % of Revenue", value=30.0, step=1.0
         )
         tax_input = st.number_input(
-            "Forecast Taxes (%)", value=25.0, step=1.0
+            "Taxes (%)", value=25.0, step=1.0
         )
         wacc_input = st.number_input(
-            "WACC (Discount Rate %)", value=10.0, step=0.5
+            "WACC (%)", value=10.0, step=0.5
         )
         tg_input = st.number_input(
-            "Terminal Growth Rate (%)", value=2.5, step=0.1
+            "Terminal Growth (%)", value=2.5, step=0.1
         )
 
 # --- FINANCIAL ENGINE CORE ---
@@ -153,12 +164,14 @@ years = hist_years_list + [
 ]
 forecast_year_labels = [y for y in years if "F" in y]
 
-df_master = pd.DataFrame(index=metrics, columns=years, dtype=float)
+df_master = pd.DataFrame(
+    index=metrics, columns=years, dtype=float
+)
 df_master = df_master.fillna(0.0)
 
-if input_scale == "Raw Values (Needs Scaling)" and unit == "Crores":
+if input_scale == "Raw Values" and unit == "Crores":
     divisor = 10000000.0
-elif input_scale == "Raw Values (Needs Scaling)" and unit == "Lakhs":
+elif input_scale == "Raw Values" and unit == "Lakhs":
     divisor = 100000.0
 else:
     divisor = 1.0
@@ -166,7 +179,8 @@ else:
 for m in metrics:
     for y in hist_years_list:
         try:
-            df_master.loc[m, y] = float(edited_hist_df.loc[m, y]) / divisor
+            val = float(edited_hist_df.loc[m, y])
+            df_master.loc[m, y] = val / divisor
         except:
             df_master.loc[m, y] = 0.0
 
@@ -183,13 +197,16 @@ for i in range(forecast_years):
     if prev_rev == 0:
         prev_rev = 0.0
 
-    df_master.loc["Revenue", curr_y] = prev_rev * (1 + rev_growth_input / 100)
+    df_master.loc["Revenue", curr_y] = (
+        prev_rev * (1 + rev_growth_input / 100)
+    )
     
     df_master.loc["COGS", curr_y] = (
         df_master.loc["Revenue", curr_y] * (cogs_percent_input / 100)
     )
     
     sg_prev = float(df_master.loc["S&G Expenses", prev_y])
+    
     if sg_prev != 0:
         df_master.loc["S&G Expenses", curr_y] = sg_prev * 1.05
     else:
@@ -248,5 +265,814 @@ df_master.loc["EBIT"] = (
 df_master.loc["EBT"] = (
     df_master.loc["EBIT"] - df_master.loc["Interest"]
 )
+
+def calc_tax(x):
+    return max(x, 0)
+
 df_master.loc["Tax"] = (
-    df_master.loc["EBT"].apply(lambda x: max(x
+    df_master.loc["EBT"].apply(calc_tax) * (tax_input / 100)
+)
+df_master.loc["Net Income"] = (
+    df_master.loc["EBT"] - df_master.loc["Tax"]
+)
+df_master.loc["Operating CF"] = (
+    df_master.loc["Net Income"] + df_master.loc["Depreciation"]
+)
+df_master.loc["Free Cash Flow"] = (
+    df_master.loc["Operating CF"] + df_master.loc["CapEx"]
+)
+df_master.loc["Financing CF"] = (
+    df_master.loc["Total Debt"].diff().fillna(0)
+)
+df_master.loc["Net Cash Flow"] = (
+    df_master.loc["Operating CF"] + 
+    df_master.loc["CapEx"] + 
+    df_master.loc["Financing CF"]
+)
+
+df_master.loc["Gross Margin (%)"] = (
+    df_master.loc["Gross Profit"] / 
+    df_master.loc["Revenue"].replace(0, np.nan)
+) * 100
+
+df_master.loc["EBITDA Margin (%)"] = (
+    df_master.loc["EBITDA"] / 
+    df_master.loc["Revenue"].replace(0, np.nan)
+) * 100
+
+df_master.loc["Net Margin (%)"] = (
+    df_master.loc["Net Income"] / 
+    df_master.loc["Revenue"].replace(0, np.nan)
+) * 100
+
+# --- KPI CALCULATIONS ---
+def safe_div(a, b):
+    try:
+        a, b = float(a), float(b)
+        return a / b if b != 0 else 0.0
+    except:
+        return 0.0
+
+kpi_df = pd.DataFrame(columns=years, dtype=float)
+for y in years:
+    kpi_df.loc["ROE (%)", y] = safe_div(
+        df_master.loc["Net Income", y], 
+        df_master.loc["Total Equity", y]
+    ) * 100
+    
+    kpi_df.loc["ROCE (%)", y] = safe_div(
+        df_master.loc["EBIT", y], 
+        df_master.loc["Total Assets", y] - 
+        df_master.loc["Current Liabilities", y]
+    ) * 100
+    
+    kpi_df.loc["EPS", y] = safe_div(
+        df_master.loc["Net Income", y], 
+        df_master.loc["Shares Outstanding", y]
+    )
+    
+    kpi_df.loc["Current Ratio", y] = safe_div(
+        df_master.loc["Current Assets", y], 
+        df_master.loc["Current Liabilities", y]
+    )
+    
+    kpi_df.loc["Debt to Equity", y] = safe_div(
+        df_master.loc["Total Debt", y], 
+        df_master.loc["Total Equity", y]
+    )
+    
+    kpi_df.loc["EBITDA Margin (%)", y] = safe_div(
+        df_master.loc["EBITDA", y], 
+        df_master.loc["Revenue", y]
+    ) * 100
+    
+    kpi_df.loc["Net Margin (%)", y] = safe_div(
+        df_master.loc["Net Income", y], 
+        df_master.loc["Revenue", y]
+    ) * 100
+    
+    kpi_df.loc["FCF Yield (%)", y] = safe_div(
+        df_master.loc["Free Cash Flow", y], 
+        df_master.loc["Revenue", y]
+    ) * 100
+
+kpi_df = kpi_df.astype(float)
+
+# --- DCF VALUATION ---
+base_yr = hist_years_list[-1]
+final_yr = years[-1]
+
+fcf_series = df_master.loc["Free Cash Flow", forecast_year_labels]
+fcf_series = fcf_series.astype(float)
+
+discount_factors = [
+    (1 + wacc_input / 100) ** (i + 1) 
+    for i in range(len(forecast_year_labels))
+]
+
+pv_fcfs = []
+for fcf, df in zip(fcf_series, discount_factors):
+    pv_fcfs.append(fcf / df)
+    
+pv_fcf_total = sum(pv_fcfs)
+
+denom = (wacc_input / 100) - (tg_input / 100)
+
+if len(fcf_series) > 0:
+    last_fcf = float(fcf_series.iloc[-1])
+else:
+    last_fcf = 0.0
+
+if denom > 0:
+    terminal_value = (last_fcf * (1 + tg_input / 100)) / denom
+else:
+    terminal_value = 0.0
+
+if discount_factors:
+    pv_tv = terminal_value / discount_factors[-1]
+else:
+    pv_tv = 0.0
+
+enterprise_value = pv_fcf_total + pv_tv
+
+net_debt = (
+    float(df_master.loc["Total Debt", base_yr]) - 
+    float(df_master.loc["Current Assets", base_yr])
+)
+
+equity_value = enterprise_value - net_debt
+shares = float(df_master.loc["Shares Outstanding", base_yr])
+implied_share_price = safe_div(equity_value, shares)
+
+# --- WACC x TGR SENSITIVITY MATRIX ---
+wacc_range = np.round(
+    np.arange(wacc_input - 2.0, wacc_input + 2.5, 0.5), 1
+)
+tgr_range = np.round(
+    np.arange(tg_input - 1.0, tg_input + 1.5, 0.5), 1
+)
+
+def dcf_ev(w, tg):
+    disc = []
+    for i in range(len(forecast_year_labels)):
+        val = (1 + w / 100) ** (i + 1)
+        disc.append(val)
+        
+    pv = sum([f / d for f, d in zip(fcf_series, disc)])
+    denom_ = (w / 100) - (tg / 100)
+    
+    if denom_ > 0:
+        tv = (last_fcf * (1 + tg / 100)) / denom_
+    else:
+        tv = 0.0
+        
+    if disc:
+        ptv = tv / disc[-1]
+    else:
+        ptv = 0.0
+        
+    return pv + ptv
+
+def dcf_price(w, tg):
+    ev = dcf_ev(w, tg)
+    eq = ev - net_debt
+    return safe_div(eq, shares)
+
+sensitivity_ev = pd.DataFrame(
+    index=[f"{w}%" for w in wacc_range], 
+    columns=[f"{t}%" for t in tgr_range]
+)
+
+sensitivity_price = pd.DataFrame(
+    index=[f"{w}%" for w in wacc_range], 
+    columns=[f"{t}%" for t in tgr_range]
+)
+
+for w in wacc_range:
+    for t in tgr_range:
+        if w / 100 > t / 100:
+            val_ev = round(dcf_ev(w, t), 1)
+            val_pr = round(dcf_price(w, t), 2)
+            sensitivity_ev.loc[f"{w}%", f"{t}%"] = val_ev
+            sensitivity_price.loc[f"{w}%", f"{t}%"] = val_pr
+        else:
+            sensitivity_ev.loc[f"{w}%", f"{t}%"] = np.nan
+            sensitivity_price.loc[f"{w}%", f"{t}%"] = np.nan
+
+sensitivity_ev = sensitivity_ev.astype(float)
+sensitivity_price = sensitivity_price.astype(float)
+
+# --- HEADER ---
+display_name = company_name if company_name else "New Model"
+st.title(f"📈 {display_name} — Analytics Suite")
+st.caption(f"Figures in **{unit_suffix}** · Indian Standards")
+
+has_data = float(df_master.loc["Revenue", base_yr]) > 0
+
+if has_data:
+    rev_base = float(df_master.loc["Revenue", base_yr])
+    rev_final = float(df_master.loc["Revenue", final_yr])
+    ebitda_base = float(kpi_df.loc["EBITDA Margin (%)", base_yr])
+    ebitda_final = float(kpi_df.loc["EBITDA Margin (%)", final_yr])
+    de_final = float(kpi_df.loc["Debt to Equity", final_yr])
+    
+    t1 = f"Revenue grows at <strong>{rev_growth_input}%</strong>. "
+    t2 = f"EBITDA shifts to <strong>{ebitda_final:.1f}%</strong>. "
+    t3 = f"Enterprise Value: <strong>{enterprise_value:,.1f}</strong>. "
+    t4 = f"Share Price: <strong>{implied_share_price:,.2f}</strong>. "
+    
+    summary_text = (
+        f"<div class='ai-box'>"
+        f"<strong>🤖 AI Analyst Summary:</strong><br>"
+        f"{t1}{t2}{t3}{t4}"
+        f"</div>"
+    )
+    st.markdown(summary_text, unsafe_allow_html=True)
+else:
+    st.info("💡 Enter historical actuals in the sidebar.")
+
+st.subheader("Key Performance Indicators")
+k1, k2, k3, k4, k5, k6 = st.columns(6)
+
+v_rev = df_master.loc['Revenue', final_yr]
+k1.metric(f"Revenue", f"{unit_suffix} {v_rev:,.0f}")
+
+v_ebt = df_master.loc['EBITDA', final_yr]
+k2.metric(f"EBITDA", f"{unit_suffix} {v_ebt:,.0f}")
+
+v_roe = kpi_df.loc['ROE (%)', final_yr]
+k3.metric("Term. ROE", f"{v_roe:.1f}%")
+
+v_fcf = df_master.loc['Free Cash Flow', final_yr]
+k4.metric("FCF", f"{unit_suffix} {v_fcf:,.0f}")
+
+k5.metric("EV", f"{unit_suffix} {enterprise_value:,.1f}")
+k6.metric("Share Px", f"{unit_suffix} {implied_share_price:,.2f}")
+
+st.divider()
+
+# --- TABS ---
+tab_names = [
+    "📑 Statements", "📊 KPIs", 
+    "💰 DCF", "🎯 Sensitivity", "🔬 Exports"
+]
+tab1, tab2, tab3, tab4, tab5 = st.tabs(tab_names)
+
+DARK_TEMPLATE = "plotly_dark"
+GREEN = "#00b050"
+RED = "#ef4444"
+BLUE = "#3b82f6"
+AMBER = "#f59e0b"
+
+with tab1:
+    st.subheader(f"Income Statement ({unit_suffix})")
+    is_rows = [
+        "Revenue", "COGS", "Gross Profit", "Gross Margin (%)", 
+        "S&G Expenses", "EBITDA", "EBITDA Margin (%)", 
+        "Depreciation", "EBIT", "Interest", "EBT", "Tax", 
+        "Net Income", "Net Margin (%)"
+    ]
+    
+    is_df = df_master.loc[
+        [r for r in is_rows if r in df_master.index]
+    ]
+
+    def style_is(df):
+        def fmt_fn(x):
+            return f"{x:.1f}" if pd.notna(x) else "—"
+            
+        styled = df.style.format(fmt_fn)
+        
+        def row_color(row_name):
+            if "Margin" in row_name or "%" in row_name: 
+                return "background-color: #1a2e1a; color: #00b050;"
+            if row_name in ["Gross Profit", "EBITDA", "Net Income"]: 
+                return "background-color: #0d1f0d; color: #00b050;"
+            return ""
+            
+        for row in df.index:
+            style = row_color(row)
+            if style: 
+                styled = styled.apply(
+                    lambda x, r=row, s=style: [
+                        s if x.name == r else "" for _ in x
+                    ], 
+                    axis=1
+                )
+        return styled
+
+    st.dataframe(style_is(is_df), use_container_width=True)
+
+    st.subheader("📈 Revenue, EBITDA & Net Income Trend")
+    fig_trend = go.Figure()
+    
+    fig_trend.add_trace(go.Bar(
+        x=years, 
+        y=df_master.loc["Revenue", years].values.tolist(), 
+        name="Revenue", 
+        marker_color=GREEN, 
+        opacity=0.85
+    ))
+    
+    fig_trend.add_trace(go.Bar(
+        x=years, 
+        y=df_master.loc["EBITDA", years].values.tolist(), 
+        name="EBITDA", 
+        marker_color=BLUE, 
+        opacity=0.85
+    ))
+    
+    fig_trend.add_trace(go.Scatter(
+        x=years, 
+        y=df_master.loc["Net Income", years].values.tolist(), 
+        name="Net Income", 
+        mode="lines+markers", 
+        line=dict(color=AMBER, width=3), 
+        marker=dict(size=8)
+    ))
+    
+    if len(hist_years_list) > 0 and len(forecast_year_labels) > 0:
+        fig_trend.add_vline(
+            x=len(hist_years_list) - 0.5, 
+            line_dash="dash", 
+            line_color="#64748b", 
+            annotation_text="Forecast", 
+            annotation_position="top right", 
+            annotation_font_color="#94a3b8"
+        )
+    
+    fig_trend.update_layout(
+        template=DARK_TEMPLATE, 
+        barmode="group", 
+        title=f"Trend ({unit_suffix})", 
+        xaxis_title="Year", 
+        yaxis_title=unit_suffix, 
+        legend=dict(orientation="h", y=1.1), 
+        height=420
+    )
+    
+    st.plotly_chart(fig_trend, use_container_width=True)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        fig_fcf = go.Figure()
+        fcf_vals = df_master.loc["Free Cash Flow", years].tolist()
+        
+        c_list = [GREEN if v >= 0 else RED for v in fcf_vals]
+        
+        fig_fcf.add_trace(go.Bar(
+            x=years, 
+            y=fcf_vals, 
+            marker_color=c_list, 
+            name="FCF"
+        ))
+        
+        fig_fcf.add_trace(go.Scatter(
+            x=years, 
+            y=df_master.loc["Operating CF", years].tolist(), 
+            name="Operating CF", 
+            mode="lines+markers", 
+            line=dict(color=AMBER, width=2), 
+            marker=dict(size=6)
+        ))
+        
+        fig_fcf.update_layout(
+            template=DARK_TEMPLATE, 
+            title=f"Cash Flow ({unit_suffix})", 
+            xaxis_title="Year", 
+            yaxis_title=unit_suffix, 
+            height=380
+        )
+        st.plotly_chart(fig_fcf, use_container_width=True)
+
+    with c2:
+        fig_margins = go.Figure()
+        
+        fig_margins.add_trace(go.Scatter(
+            x=years, 
+            y=df_master.loc["Gross Margin (%)", years].tolist(), 
+            name="Gross Margin", 
+            mode="lines+markers", 
+            line=dict(color=GREEN, width=3)
+        ))
+        
+        fig_margins.add_trace(go.Scatter(
+            x=years, 
+            y=df_master.loc["EBITDA Margin (%)", years].tolist(), 
+            name="EBITDA Margin", 
+            mode="lines+markers", 
+            line=dict(color=BLUE, width=3)
+        ))
+        
+        fig_margins.add_trace(go.Scatter(
+            x=years, 
+            y=df_master.loc["Net Margin (%)", years].tolist(), 
+            name="Net Margin", 
+            mode="lines+markers", 
+            line=dict(color=AMBER, width=3)
+        ))
+        
+        fig_margins.update_layout(
+            template=DARK_TEMPLATE, 
+            title="Margins (%)", 
+            xaxis_title="Year", 
+            yaxis_title="%", 
+            height=380
+        )
+        st.plotly_chart(fig_margins, use_container_width=True)
+
+    c3, c4 = st.columns(2)
+    with c3:
+        st.subheader(f"Balance Sheet ({unit_suffix})")
+        bs_rows = [
+            "Total Assets", "Current Assets", 
+            "Current Liabilities", "Total Debt", "Total Equity"
+        ]
+        
+        bs_df = df_master.loc[bs_rows]
+        st.dataframe(
+            bs_df.style.format("{:,.1f}", na_rep="—"), 
+            use_container_width=True
+        )
+        
+    with c4:
+        st.subheader(f"Cash Flow ({unit_suffix})")
+        cf_rows = [
+            "Operating CF", "CapEx", "Financing CF", 
+            "Free Cash Flow", "Net Cash Flow"
+        ]
+        
+        cf_df = df_master.loc[cf_rows]
+        st.dataframe(
+            cf_df.style.format("{:,.1f}", na_rep="—"), 
+            use_container_width=True
+        )
+
+with tab2:
+    st.subheader(f"Advanced Financial Metrics")
+    st.dataframe(
+        kpi_df.style.format("{:,.2f}", na_rep="—"), 
+        use_container_width=True
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        fig_ret = go.Figure()
+        
+        fig_ret.add_trace(go.Bar(
+            x=years, 
+            y=kpi_df.loc["ROE (%)", years].values.tolist(), 
+            name="ROE (%)", 
+            marker_color=GREEN
+        ))
+        
+        fig_ret.add_trace(go.Bar(
+            x=years, 
+            y=kpi_df.loc["ROCE (%)", years].values.tolist(), 
+            name="ROCE (%)", 
+            marker_color=BLUE
+        ))
+        
+        fig_ret.update_layout(
+            template=DARK_TEMPLATE, 
+            barmode="group", 
+            title="Returns (%)", 
+            xaxis_title="Year", 
+            yaxis_title="%", 
+            height=380
+        )
+        st.plotly_chart(fig_ret, use_container_width=True)
+
+    with c2:
+        fig_lev = go.Figure()
+        
+        fig_lev.add_trace(go.Scatter(
+            x=years, 
+            y=kpi_df.loc["Debt to Equity", years].tolist(), 
+            name="D/E Ratio", 
+            mode="lines+markers", 
+            line=dict(color=RED, width=3)
+        ))
+        
+        fig_lev.add_trace(go.Scatter(
+            x=years, 
+            y=kpi_df.loc["Current Ratio", years].tolist(), 
+            name="Current Ratio", 
+            mode="lines+markers", 
+            line=dict(color=GREEN, width=3)
+        ))
+        
+        fig_lev.update_layout(
+            template=DARK_TEMPLATE, 
+            title="Ratios", 
+            xaxis_title="Year", 
+            yaxis_title="Ratio (x)", 
+            height=380
+        )
+        st.plotly_chart(fig_lev, use_container_width=True)
+
+with tab3:
+    st.subheader("DCF Breakdown")
+    
+    val_debt = float(df_master.loc["Total Debt", base_yr])
+    val_cash = float(df_master.loc["Current Assets", base_yr])
+    
+    dcf_data = {
+        "Metric": [
+            "PV of FCFs", "Terminal Value", "PV of TV", 
+            "Enterprise Value", "Less: Debt", "Add: Cash", 
+            "Equity Value", "Shares", "Implied Price"
+        ],
+        f"Value ({unit_suffix})": [
+            pv_fcf_total, terminal_value, pv_tv, 
+            enterprise_value, val_debt, val_cash, 
+            equity_value, shares, implied_share_price
+        ]
+    }
+    
+    dcf_df = pd.DataFrame(dcf_data).set_index("Metric")
+    st.dataframe(
+        dcf_df.style.format("{:,.2f}", na_rep="—"), 
+        use_container_width=True
+    )
+
+    st.divider()
+    st.subheader("🏗️ EV Bridge Waterfall")
+    
+    nd_val = val_debt - val_cash
+    
+    fig_br = go.Figure(go.Waterfall(
+        name="EV Bridge", 
+        orientation="v", 
+        measure=[
+            "relative", "relative", "total", "relative", "total"
+        ],
+        x=["PV FCF", "PV TV", "EV", "Net Debt", "Equity"],
+        y=[pv_fcf_total, pv_tv, 0, -nd_val, 0],
+        connector={"line": {"color": "#475569"}}, 
+        increasing={"marker": {"color": GREEN}}, 
+        decreasing={"marker": {"color": RED}}, 
+        totals={"marker": {"color": BLUE}},
+        text=[
+            f"{pv_fcf_total:,.1f}", 
+            f"{pv_tv:,.1f}", 
+            f"{enterprise_value:,.1f}", 
+            f"{abs(nd_val):,.1f}", 
+            f"{equity_value:,.1f}"
+        ],
+        textposition="outside"
+    ))
+    
+    fig_br.update_layout(
+        template=DARK_TEMPLATE, 
+        title=f"Bridge ({unit_suffix})", 
+        yaxis_title=unit_suffix, 
+        height=480, 
+        showlegend=False
+    )
+    st.plotly_chart(fig_br, use_container_width=True)
+
+with tab4:
+    st.subheader("🎯 Sensitivity Analysis")
+    st.caption(f"Base: WACC {wacc_input}% | TGR {tg_input}%")
+
+    col_sens1, col_sens2 = st.columns(2)
+    with col_sens1:
+        st.markdown(f"#### EV Sensitivity ({unit_suffix})")
+        
+        def color_ev_cell(val):
+            if pd.isna(val): 
+                return "background-color: #1e293b; color: #64748b;"
+            if val > enterprise_value * 1.05: 
+                return "background-color: #052e0a; color: #00b050;"
+            elif val > enterprise_value * 0.95: 
+                return "background-color: #0d2818; color: #86efac;"
+            elif val < enterprise_value * 0.90: 
+                return "background-color: #2d0a0a; color: #fca5a5;"
+            return "background-color: #1a1a2e; color: #cbd5e1;"
+            
+        ev_styled = sensitivity_ev.style.map(color_ev_cell)
+        st.dataframe(
+            ev_styled.format("{:,.1f}", na_rep="N/A"), 
+            use_container_width=True
+        )
+
+    with col_sens2:
+        st.markdown(f"#### Price Sensitivity ({unit_suffix})")
+        
+        def color_pr_cell(val):
+            if pd.isna(val): 
+                return "background-color: #1e293b; color: #64748b;"
+            if implied_share_price != 0:
+                if val > implied_share_price * 1.10: 
+                    return "background-color: #052e0a; color: green;"
+                elif val > implied_share_price * 0.95: 
+                    return "background-color: #0d2818; color: lime;"
+                elif val < implied_share_price * 0.85: 
+                    return "background-color: #2d0a0a; color: red;"
+            return "background-color: #1a1a2e; color: #cbd5e1;"
+            
+        pr_styled = sensitivity_price.style.map(color_pr_cell)
+        st.dataframe(
+            pr_styled.format("{:,.2f}", na_rep="N/A"), 
+            use_container_width=True
+        )
+
+    st.divider()
+    st.subheader("🌡️ Heatmap")
+    ev_heat = sensitivity_ev.fillna(0).values.tolist()
+    
+    safe_colors = [
+        [0.0, "#2d0a0a"],
+        [0.3, "#7f1d1d"],
+        [0.5, "#1a2e1a"],
+        [0.7, "#14532d"],
+        [1.0, "#00b050"]
+    ]
+    
+    txt_arr = []
+    for row in ev_heat:
+        new_row = []
+        for v in row:
+            if v != 0:
+                new_row.append(f"{unit_suffix}\n{v:,.0f}")
+            else:
+                new_row.append("N/A")
+        txt_arr.append(new_row)
+    
+    fig_heat = go.Figure(data=go.Heatmap(
+        z=ev_heat, 
+        x=[f"TGR {c}" for c in sensitivity_ev.columns], 
+        y=[f"WACC {r}" for r in sensitivity_ev.index],
+        colorscale=safe_colors,
+        text=txt_arr, 
+        texttemplate="%{text}", 
+        textfont={"size": 11}, 
+        hoverongaps=False
+    ))
+    
+    fig_heat.update_layout(
+        template=DARK_TEMPLATE, 
+        title=f"EV Sensitivity ({unit_suffix})", 
+        xaxis_title="TGR", 
+        yaxis_title="WACC", 
+        height=420
+    )
+    st.plotly_chart(fig_heat, use_container_width=True)
+
+# ============================================================
+# TAB 5 — EXCEL EXPORT
+# ============================================================
+with tab5:
+    st.info("📥 Export full model to Excel.")
+    
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        workbook = writer.book
+        
+        t_fmt = workbook.add_format({
+            'bold': True, 'font_size': 20, 'font_color': '#00b050'
+        })
+        s_fmt = workbook.add_format({
+            'bold': True, 'font_size': 12, 'font_color': '#64748b'
+        })
+        h_fmt = workbook.add_format({
+            'bold': True, 'bg_color': '#0f172a', 
+            'font_color': 'white', 'border': 1, 'align': 'center'
+        })
+        i_fmt = workbook.add_format({
+            'bold': True, 'bg_color': '#f1f5f9', 'border': 1
+        })
+        n_fmt = workbook.add_format({
+            'num_format': '#,##0.00', 'border': 1
+        })
+        p_fmt = workbook.add_format({
+            'num_format': '0.00"%"', 'border': 1
+        }) 
+
+        def write_sht(df, s_name, title, is_pct=False):
+            df.to_excel(writer, sheet_name=s_name, startrow=3)
+            ws = writer.sheets[s_name]
+            ws.hide_gridlines(2)
+
+            d_name = display_name.upper() if display_name else "VALUATION"
+            ws.write('A1', d_name, t_fmt)
+            ws.write('A2', title, s_fmt)
+
+            ws.set_column('A:A', 28, i_fmt)
+            fmt = p_fmt if is_pct else n_fmt
+            
+            for c_num, c_name in enumerate(df.columns):
+                ws.set_column(c_num + 1, c_num + 1, 14, fmt)
+                ws.write(3, c_num + 1, c_name, h_fmt)
+            ws.write(3, 0, "Metric", h_fmt)
+
+        write_sht(df_master, 'Statements', f'Model ({unit_suffix})')
+        write_sht(kpi_df, 'KPIs', 'KPIs & Ratios')
+
+        d_df = pd.DataFrame(dcf_data).set_index("Metric")
+        write_sht(d_df, 'DCF', f'DCF ({unit_suffix})')
+        writer.sheets['DCF'].set_column('B:B', 20, n_fmt)
+
+        write_sht(sensitivity_ev, 'Sens-EV', f'EV ({unit_suffix})')
+        ws_ev = writer.sheets['Sens-EV']
+        
+        c_fmt_dict = {
+            'type': '3_color_scale', 
+            'min_color': '#fca5a5', 
+            'mid_color': '#f8fafc', 
+            'max_color': '#86efac'
+        }
+        
+        ws_ev.conditional_format(
+            4, 1, 4 + len(sensitivity_ev.index) - 1, 
+            len(sensitivity_ev.columns), c_fmt_dict
+        )
+        ws_ev.write(3, 0, "WACC \ TGR", h_fmt)
+
+        write_sht(sensitivity_price, 'Sens-Px', f'Px ({unit_suffix})')
+        ws_pr = writer.sheets['Sens-Px']
+        ws_pr.conditional_format(
+            4, 1, 4 + len(sensitivity_price.index) - 1, 
+            len(sensitivity_price.columns), c_fmt_dict
+        )
+        ws_pr.write(3, 0, "WACC \ TGR", h_fmt)
+
+        ws_c = workbook.add_worksheet('Charts')
+        ws_c.hide_gridlines(2)
+        d_name = display_name.upper() if display_name else "VALUATION"
+        ws_c.write('A1', d_name, t_fmt)
+        ws_c.write('A2', 'Visuals', s_fmt)
+        
+        ny = len(years)
+
+        c1 = workbook.add_chart({'type': 'column'})
+        rr = df_master.index.get_loc('Revenue') + 4
+        er = df_master.index.get_loc('EBITDA') + 4
+        
+        c1.add_series({
+            'name': ['Statements', rr, 0],
+            'categories': ['Statements', 3, 1, 3, ny],
+            'values': ['Statements', rr, 1, rr, ny],
+            'fill': {'color': '#00b050'}
+        })
+        c1.add_series({
+            'name': ['Statements', er, 0],
+            'categories': ['Statements', 3, 1, 3, ny],
+            'values': ['Statements', er, 1, er, ny],
+            'fill': {'color': '#3b82f6'}
+        })
+        c1.set_title({'name': f'Rev vs EBITDA ({unit_suffix})'})
+        c1.set_legend({'position': 'bottom'})
+        ws_c.insert_chart('B5', c1, {'x_scale': 1.4, 'y_scale': 1.2})
+        
+        c2 = workbook.add_chart({'type': 'line'})
+        fr = df_master.index.get_loc('Free Cash Flow') + 4
+        orw = df_master.index.get_loc('Operating CF') + 4
+        
+        c2.add_series({
+            'name': ['Statements', fr, 0],
+            'categories': ['Statements', 3, 1, 3, ny],
+            'values': ['Statements', fr, 1, fr, ny],
+            'line': {'color': '#00b050', 'width': 2.5}
+        })
+        c2.add_series({
+            'name': ['Statements', orw, 0],
+            'categories': ['Statements', 3, 1, 3, ny],
+            'values': ['Statements', orw, 1, orw, ny],
+            'line': {'color': '#f59e0b', 'width': 2.5}
+        })
+        c2.set_title({'name': f'Cash Flows ({unit_suffix})'})
+        c2.set_legend({'position': 'bottom'})
+        ws_c.insert_chart('L5', c2, {'x_scale': 1.4, 'y_scale': 1.2})
+        
+        c3 = workbook.add_chart({'type': 'column'})
+        ror = kpi_df.index.get_loc('ROE (%)') + 4
+        rcr = kpi_df.index.get_loc('ROCE (%)') + 4
+        
+        c3.add_series({
+            'name': ['KPIs', ror, 0],
+            'categories': ['KPIs', 3, 1, 3, ny],
+            'values': ['KPIs', ror, 1, ror, ny],
+            'fill': {'color': '#00b050'}
+        })
+        c3.add_series({
+            'name': ['KPIs', rcr, 0],
+            'categories': ['KPIs', 3, 1, 3, ny],
+            'values': ['KPIs', rcr, 1, rcr, ny],
+            'fill': {'color': '#3b82f6'}
+        })
+        c3.set_title({'name': 'Returns (%)'})
+        c3.set_legend({'position': 'bottom'})
+        ws_c.insert_chart('B22', c3, {'x_scale': 1.4, 'y_scale': 1.2})
+        
+    output.seek(0)
+
+    f_name = f"{display_name.replace(' ', '_')}_Model.xlsx"
+    st.download_button(
+        label="📥 Download Excel (.xlsx)",
+        data=output.getvalue(),
+        file_name=f_name,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
